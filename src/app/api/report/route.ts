@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { evaluateMultimodalRubric } from "@/lib/ai/rubric-evaluator";
+import { getReportById } from "@/lib/db/reports";
+import { getSessionFromRequest } from "@/lib/auth/session";
 import { rateLimiter } from "@/lib/security/rate-limiter";
 import { sanitizeNoSql } from "@/lib/security/input-sanitizer";
 
@@ -22,6 +24,70 @@ const ReportRequestSchema = z.object({
   judgeQuestions: z.array(z.any()).default([]),
   dataCoverageRatio: z.number().min(0).max(1).default(0.95),
 });
+
+/**
+ * GET /api/report?id=rpt_xxxx — Fetch a saved report by ID
+ */
+export async function GET(req: NextRequest) {
+  const reportId = req.nextUrl.searchParams.get("id");
+
+  if (!reportId) {
+    return NextResponse.json(
+      { error: "Thiếu ID báo cáo." },
+      { status: 400 }
+    );
+  }
+
+  const authSession = await getSessionFromRequest(req);
+  if (!authSession?.userId) {
+    return NextResponse.json(
+      { error: "Yêu cầu đăng nhập." },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const report = getReportById(reportId);
+
+    if (!report) {
+      return NextResponse.json(
+        { error: "Không tìm thấy báo cáo." },
+        { status: 404 }
+      );
+    }
+
+    // Ownership check
+    if (report.user_id !== authSession.userId) {
+      return NextResponse.json(
+        { error: "Không có quyền xem báo cáo này." },
+        { status: 403 }
+      );
+    }
+
+    // Parse stored JSON fields and reconstruct MPREEvaluationResult-like object
+    const dimensions = JSON.parse(report.dimensions_json);
+    const metrics = JSON.parse(report.metrics_json);
+    const recommendations = JSON.parse(report.recommendations_json);
+
+    return NextResponse.json({
+      totalScore: report.total_score,
+      maxScore: 100,
+      percentage: report.total_score,
+      tier: report.tier,
+      dimensions,
+      metricsSummary: metrics,
+      keyRecommendations: recommendations,
+      reportId: report.id,
+      createdAt: report.created_at,
+    });
+  } catch (error: any) {
+    console.error("[Report GET Error]", error);
+    return NextResponse.json(
+      { error: "Không thể tải báo cáo." },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   const clientIp = req.headers.get("x-forwarded-for") || "client-local";

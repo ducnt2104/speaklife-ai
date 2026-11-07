@@ -41,23 +41,35 @@ export default function HomePage() {
               </Link>
             </div>
 
-            {/* Quick Metrics Bar */}
+            {/* Core Capabilities */}
             <div className="pt-10 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto text-left">
               <Card className="p-4 bg-surface/80 backdrop-blur">
-                <div className="text-2xl font-bold font-mono text-primary">+89.4%</div>
-                <div className="text-xs text-text-secondary mt-1">Tỷ lệ Eye Contact duy trì</div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Eye className="w-5 h-5 text-primary" />
+                </div>
+                <div className="text-sm font-semibold text-foreground">Phân tích Ánh mắt</div>
+                <div className="text-xs text-text-secondary mt-1">Đo tỷ lệ Eye Contact thời gian thực</div>
               </Card>
               <Card className="p-4 bg-surface/80 backdrop-blur">
-                <div className="text-2xl font-bold font-mono text-emerald-600">-78.4%</div>
-                <div className="text-xs text-text-secondary mt-1">Tần suất tật ngôn ngữ (à, ừm)</div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Mic2 className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div className="text-sm font-semibold text-foreground">Phát hiện Tật ngôn ngữ</div>
+                <div className="text-xs text-text-secondary mt-1">Nhận dạng từ đệm (à, ừm, ờ) theo thời gian</div>
               </Card>
               <Card className="p-4 bg-surface/80 backdrop-blur">
-                <div className="text-2xl font-bold font-mono text-secondary">+64.6%</div>
-                <div className="text-xs text-text-secondary mt-1">Điểm phản xạ trả lời phản biện</div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Cpu className="w-5 h-5 text-secondary" />
+                </div>
+                <div className="text-sm font-semibold text-foreground">Giám khảo AI Phản biện</div>
+                <div className="text-xs text-text-secondary mt-1">Chất vấn và đánh giá câu trả lời phản biện</div>
               </Card>
               <Card className="p-4 bg-surface/80 backdrop-blur">
-                <div className="text-2xl font-bold font-mono text-pink-600">100%</div>
-                <div className="text-xs text-text-secondary mt-1">Bảo mật riêng tư (Zero Cloud Video)</div>
+                <div className="flex items-center gap-2 mb-2">
+                  <ShieldCheck className="w-5 h-5 text-pink-600" />
+                </div>
+                <div className="text-sm font-semibold text-foreground">100% Bảo mật</div>
+                <div className="text-xs text-text-secondary mt-1">Zero-Data Retention — không lưu video/audio</div>
               </Card>
             </div>
           </div>

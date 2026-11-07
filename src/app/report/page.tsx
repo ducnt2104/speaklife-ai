@@ -1,16 +1,41 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLeft, Download, RotateCcw, Sparkles } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLeft, Download, RotateCcw, Sparkles, Loader2 } from "lucide-react";
 import { Button, Card, Badge } from "@/components/ui";
 import { MPRERadarChart } from "@/components/charts/MPRERadarChart";
-import { MPREEvaluationResult, calculateMPREScore } from "@/lib/rubric/mpre-calculator";
+import { MPREEvaluationResult } from "@/lib/rubric/mpre-calculator";
 
-export default function ReportPage() {
+function ReportContent() {
+  const searchParams = useSearchParams();
   const [report, setReport] = useState<MPREEvaluationResult | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const reportId = searchParams.get("id");
+
+    if (reportId) {
+      // Fetch from server API by ID
+      fetch(`/api/report?id=${encodeURIComponent(reportId)}`)
+        .then((res) => {
+          if (!res.ok) throw new Error("Không tải được báo cáo");
+          return res.json();
+        })
+        .then((data) => setReport(data))
+        .catch(() => {
+          // Fallback to sessionStorage
+          loadFromSession();
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      loadFromSession();
+      setIsLoading(false);
+    }
+  }, [searchParams]);
+
+  function loadFromSession() {
     if (typeof window !== "undefined") {
       const stored = sessionStorage.getItem("speaklife_final_report");
       if (stored) {
@@ -18,34 +43,38 @@ export default function ReportPage() {
           setReport(JSON.parse(stored));
           return;
         } catch {
-          // Fallback to default calculated demo report
+          // Invalid data
         }
       }
-      // Default high quality demo report
-      const defaultReport = calculateMPREScore({
-        durationSeconds: 195,
-        totalWords: 430,
-        faceDetectedFrames: 5800,
-        totalAnalyzedFrames: 5800,
-        eyeContactFrames: 4640, // 80%
-        shoulderTiltVariance: 4,
-        averageRmsDecibels: -18,
-        pitchF0StdDev: 16,
-        fillerWordCount: 2,
-        aiContentScore: 19,
-        rebuttalRounds: [
-          { reactionTimeSeconds: 2.8, score: 14 },
-          { reactionTimeSeconds: 3.2, score: 13 }
-        ]
-      });
-      setReport(defaultReport);
     }
-  }, []);
+    setReport(null);
+  }
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+        <p className="text-sm text-text-secondary mt-4">Đang tải báo cáo...</p>
+      </div>
+    );
+  }
 
   if (!report) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
-        <p className="text-sm text-text-secondary">Đang tổng hợp dữ liệu chẩn đoán...</p>
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center space-y-6">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center">
+          <Award className="w-8 h-8 text-primary/60" />
+        </div>
+        <h2 className="text-xl font-extrabold text-foreground">Chưa có báo cáo nào</h2>
+        <p className="text-sm text-text-secondary max-w-sm mx-auto">
+          Hoàn thành một buổi luyện tập thuyết trình để nhận báo cáo chẩn đoán MPRE 5 chiều tại đây.
+        </p>
+        <Link href="/setup">
+          <Button variant="primary" size="md">
+            <span>Bắt đầu luyện tập</span>
+            <ArrowLeft className="w-4 h-4 ml-1.5 rotate-180" />
+          </Button>
+        </Link>
       </div>
     );
   }
@@ -61,7 +90,7 @@ export default function ReportPage() {
       {/* Report Header Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-6">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold uppercase tracking-wider mb-2 border border-emerald-200">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2 border border-emerald-200 dark:border-emerald-800">
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>Giai đoạn 4 — Báo cáo Chẩn đoán Đa chiều MPRE</span>
           </div>
@@ -90,7 +119,7 @@ export default function ReportPage() {
       {/* Hero Score Grid: Radar Chart + Total Score Badge */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
         {/* Total Score & Tier (5 Cols) */}
-        <Card className="lg:col-span-5 p-8 bg-gradient-to-br from-surface to-violet-50/40 border-border flex flex-col justify-between">
+        <Card className="lg:col-span-5 p-8 bg-gradient-to-br from-surface to-violet-50/40 dark:to-violet-950/20 border-border flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase font-bold tracking-wider text-text-muted">Tổng Điểm MPRE</span>
@@ -155,7 +184,7 @@ export default function ReportPage() {
               </div>
 
               {dim.hasInsufficientData && (
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-800">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>Độ bao phủ dữ liệu hạn chế, điểm số mang tính tham khảo.</span>
                 </div>
@@ -166,14 +195,14 @@ export default function ReportPage() {
       </div>
 
       {/* Actionable Micro-Drills Recommendation Box */}
-      <Card className="p-6 bg-violet-50/60 border-violet-200">
+      <Card className="p-6 bg-violet-50/60 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800">
         <h4 className="font-heading font-bold text-primary text-base flex items-center gap-2 mb-3">
           <Sparkles className="w-5 h-5 text-primary" />
           <span>Kế Hoạch Cải Thiện & Bài Tập Vi Mô (Micro-Drills)</span>
         </h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {report.keyRecommendations.map((rec, i) => (
-            <div key={i} className="flex items-start gap-2.5 bg-surface p-3.5 rounded-xl border border-violet-100 text-xs text-foreground">
+            <div key={i} className="flex items-start gap-2.5 bg-surface p-3.5 rounded-xl border border-violet-100 dark:border-violet-800 text-xs text-foreground">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
               <span className="leading-relaxed">{rec}</span>
             </div>
@@ -181,5 +210,18 @@ export default function ReportPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function ReportPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+        <p className="text-sm text-text-secondary mt-4">Đang tải báo cáo...</p>
+      </div>
+    }>
+      <ReportContent />
+    </Suspense>
   );
 }

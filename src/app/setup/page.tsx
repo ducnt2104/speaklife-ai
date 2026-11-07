@@ -11,10 +11,8 @@ export default function SetupPage() {
 
   const [selectedScenario, setSelectedScenario] = useState<string>("stem_khkt");
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("standard");
-  const [outlineTitle, setOutlineTitle] = useState<string>("Bảo vệ Đề tài Nghiên cứu KHKT / AI 2026");
-  const [outlineContent, setOutlineContent] = useState<string>(
-    "Kính thưa Hội đồng Giám khảo, hôm nay nhóm em xin trình bày giải pháp SpeakLife AI - Phòng luyện phản xạ giao tiếp và thuyết trình thực chiến. Vấn đề giải quyết là 75% học sinh mắc hội chứng sợ nói trước đám đông và thiếu môi trường thử sai. Giải pháp tích hợp Edge AI và khán phòng 3D xử lý biên khép kín, bảo mật 100% dữ liệu."
-  );
+  const [outlineTitle, setOutlineTitle] = useState<string>("");
+  const [outlineContent, setOutlineContent] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const handleStartRehearsal = () => {

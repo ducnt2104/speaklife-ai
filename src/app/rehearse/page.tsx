@@ -15,32 +15,37 @@ export default function RehearsePage() {
 
   const [scenarioId, setScenarioId] = useState("stem_khkt");
   const [difficultyId, setDifficultyId] = useState("standard");
-  const [outlineTitle, setOutlineTitle] = useState("Bảo vệ Đề tài Nghiên cứu KHKT / AI 2026");
+  const [outlineTitle, setOutlineTitle] = useState("");
 
   // Rehearsal State Lifecycle: "ready" -> "presenting" -> "qna" -> "completed"
   const [rehearsalPhase, setRehearsalPhase] = useState<"ready" | "presenting" | "qna" | "completed">("ready");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Live Metrics
-  const [eyeContactRatio, setEyeContactRatio] = useState(78);
-  const [wpm, setWpm] = useState(130);
-  const [dbLevel, setDbLevel] = useState(-18);
-  const [fillerCount, setFillerCount] = useState(2);
+  // Live Metrics — initialize at zero, updated from real sensor data
+  const [eyeContactRatio, setEyeContactRatio] = useState(0);
+  const [wpm, setWpm] = useState(0);
+  const [dbLevel, setDbLevel] = useState(-60);
+  const [fillerCount, setFillerCount] = useState(0);
   const [audienceReaction, setAudienceReaction] = useState<"neutral" | "attentive" | "distracted" | "applause">("neutral");
 
   // Q&A State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [rebuttalRounds, setRebuttalRounds] = useState<Array<{ reactionTimeSeconds: number; score: number }>>([]);
   const [isEvaluatingRebuttal, setIsEvaluatingRebuttal] = useState(false);
+  const [aiQuestions, setAiQuestions] = useState<string[]>([]);
+  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
 
   const scenario = PRACTICE_SCENARIOS.find((s) => s.id === scenarioId) || PRACTICE_SCENARIOS[1];
   const difficulty = DIFFICULTY_TIERS.find((d) => d.id === difficultyId) || DIFFICULTY_TIERS[1];
 
-  const sampleQuestions = [
-    "Tại sao nhóm lại chọn mô hình xử lý biên (Edge AI) thay vì gửi toàn bộ video lên máy chủ đám mây để tận dụng các mô hình thị giác khổng lồ?",
-    "Số liệu thử nghiệm trên 30 học sinh tại Đồng Nai cho thấy tỷ lệ Eye Contact tăng 89%, vậy trong điều kiện phòng học thực tế thiếu sáng thì độ chính xác của thuật toán Gaze Vector bị ảnh hưởng thế nào?"
+  // Fallback questions in case AI API is unavailable
+  const fallbackQuestions = [
+    "Giải pháp của nhóm có thể áp dụng trong điều kiện thực tế phòng học thiếu sáng hay thiết bị yếu không? Hãy giải thích cơ sở kỹ thuật.",
+    "Kết quả thử nghiệm trên 30 học sinh có đủ đại diện để khái quát hóa kết luận không? Nhóm đã xử lý yếu tố sai lệch mẫu như thế nào?"
   ];
+
+  const currentQuestions = aiQuestions.length > 0 ? aiQuestions : fallbackQuestions;
 
   useEffect(() => {
     // Read session storage configuration if set
@@ -85,47 +90,120 @@ export default function RehearsePage() {
     setIsPaused(false);
   };
 
-  const handleFinishSpeaking = () => {
+  const handleFinishSpeaking = async () => {
     // Transition to Stage 3: Adversarial AI Q&A
     setRehearsalPhase("qna");
     setAudienceReaction("neutral");
+    setIsLoadingQuestions(true);
+
+    // Fetch real questions from AI Judge API
+    try {
+      const outlineContent = typeof window !== "undefined" 
+        ? sessionStorage.getItem("speaklife_outline_content") || ""
+        : "";
+      
+      const res = await fetch("/api/judge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: outlineTitle,
+          scenario: scenarioId,
+          difficulty: difficultyId,
+          outlineText: outlineContent,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.questions && data.questions.length > 0) {
+          setAiQuestions(data.questions.map((q: any) => q.questionText));
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch AI questions, using fallback:", err);
+    } finally {
+      setIsLoadingQuestions(false);
+    }
   };
 
-  const handleRebuttalSubmit = (answerText: string, reactionSeconds: number) => {
+  const handleRebuttalSubmit = async (answerText: string, reactionSeconds: number) => {
     setIsEvaluatingRebuttal(true);
 
-    setTimeout(() => {
-      const roundScore = Math.min(15, Math.max(10, 15 - Math.round(reactionSeconds * 0.5)));
-      const updatedRounds = [...rebuttalRounds, { reactionTimeSeconds: reactionSeconds, score: roundScore }];
-      setRebuttalRounds(updatedRounds);
-      setIsEvaluatingRebuttal(false);
+    let roundScore = 12; // Default score
 
-      if (currentQuestionIndex + 1 < difficulty.rebuttalCount && currentQuestionIndex + 1 < sampleQuestions.length) {
-        setCurrentQuestionIndex((prev) => prev + 1);
-      } else {
-        // Complete rehearsal and navigate to report
-        setRehearsalPhase("completed");
-        setAudienceReaction("applause");
+    // Call real evaluation API
+    try {
+      const res = await fetch("/api/judge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionId: `q${currentQuestionIndex + 1}`,
+          questionText: currentQuestions[currentQuestionIndex] || "",
+          targetedFlaw: "Đánh giá phản biện",
+          userAnswer: answerText,
+          responseTimeSec: reactionSeconds,
+        }),
+      });
 
-        // Compute finalized MPRE diagnostic score
-        const evaluation = calculateMPREScore({
-          durationSeconds: Math.max(30, elapsedSeconds),
-          totalWords: Math.round((Math.max(30, elapsedSeconds) / 60) * wpm),
-          faceDetectedFrames: 900,
-          totalAnalyzedFrames: 900,
-          eyeContactFrames: Math.round(900 * (eyeContactRatio / 100)),
-          shoulderTiltVariance: 4,
-          averageRmsDecibels: dbLevel,
-          pitchF0StdDev: 16,
-          fillerWordCount: fillerCount,
-          aiContentScore: 18,
-          rebuttalRounds: updatedRounds
-        });
-
-        sessionStorage.setItem("speaklife_final_report", JSON.stringify(evaluation));
-        router.push("/report");
+      if (res.ok) {
+        const evaluation = await res.json();
+        if (evaluation.score !== undefined) {
+          roundScore = Math.round(evaluation.score * 1.5); // Scale 0-10 to 0-15
+        }
       }
-    }, 1200);
+    } catch (err) {
+      console.warn("Failed to evaluate rebuttal, using heuristic:", err);
+      roundScore = Math.min(15, Math.max(8, 15 - Math.round(reactionSeconds * 0.5)));
+    }
+
+    const updatedRounds = [...rebuttalRounds, { reactionTimeSeconds: reactionSeconds, score: roundScore }];
+    setRebuttalRounds(updatedRounds);
+    setIsEvaluatingRebuttal(false);
+
+    if (currentQuestionIndex + 1 < difficulty.rebuttalCount && currentQuestionIndex + 1 < currentQuestions.length) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+    } else {
+      // Complete rehearsal and navigate to report
+      setRehearsalPhase("completed");
+      setAudienceReaction("applause");
+
+      // Compute finalized MPRE diagnostic score
+      const evaluation = calculateMPREScore({
+        durationSeconds: Math.max(30, elapsedSeconds),
+        totalWords: Math.round((Math.max(30, elapsedSeconds) / 60) * (wpm || 120)),
+        faceDetectedFrames: 900,
+        totalAnalyzedFrames: 900,
+        eyeContactFrames: Math.round(900 * (eyeContactRatio / 100)),
+        shoulderTiltVariance: 4,
+        averageRmsDecibels: dbLevel,
+        pitchF0StdDev: 16,
+        fillerWordCount: fillerCount,
+        aiContentScore: 18,
+        rebuttalRounds: updatedRounds
+      });
+
+      sessionStorage.setItem("speaklife_final_report", JSON.stringify(evaluation));
+      
+      // Also save to server if possible
+      try {
+        await fetch("/api/report/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: `local_${Date.now()}`,
+            durationSeconds: Math.max(30, elapsedSeconds),
+            eyeContactRatio: eyeContactRatio / 100,
+            averageWpm: wpm || 120,
+            fillerOccurrences: [],
+            rebuttalRounds: updatedRounds,
+          }),
+        });
+      } catch {
+        // Report saved locally even if server save fails
+      }
+
+      router.push("/report");
+    }
   };
 
   const formatTime = (secs: number) => {
@@ -227,7 +305,7 @@ export default function RehearsePage() {
               judgeName={difficulty.judgeName}
               judgeTitle={difficulty.judgeTitle}
               scenarioTitle={scenario.title}
-              currentQuestion={sampleQuestions[currentQuestionIndex] || sampleQuestions[0]}
+              currentQuestion={currentQuestions[currentQuestionIndex] || currentQuestions[0]}
               questionNumber={currentQuestionIndex + 1}
               totalQuestions={difficulty.rebuttalCount}
               timerSeconds={difficulty.questionTimerSeconds}

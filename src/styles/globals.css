@@ -31,3 +31,31 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Reduced motion class (user preference override) */
+.reduce-motion *, .reduce-motion ::before, .reduce-motion ::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Compact mode — tighter spacing */
+.compact {
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+}
+
+/* Font size overrides */
+.font-size-small {
+  font-size: 14px;
+}
+.font-size-large {
+  font-size: 18px;
+}

@@ -1,38 +1,122 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { getSessionFromRequest } from "@/lib/auth/session";
+import { saveReport } from "@/lib/db/reports";
+import { createSession, getSessionById, completeSession } from "@/lib/db/sessions";
+import { calculateMPREScore } from "@/lib/rubric/mpre-calculator";
+import { rateLimiter } from "@/lib/security/rate-limiter";
+import { sanitizeNoSql } from "@/lib/security/input-sanitizer";
 
-const ReportSaveSchema = z.object({
-  scenarioId: z.string().min(1),
-  outlineTitle: z.string().min(1),
-  totalScore: z.number().min(0).max(100),
-  tier: z.string(),
-  metricsSummary: z.object({
-    wpm: z.number(),
-    eyeContactRatio: z.number(),
-    fillerWordRatePerMinute: z.number(),
-    avgReactionSeconds: z.number()
-  })
+const SaveReportSchema = z.object({
+  sessionId: z.string().min(1).max(100),
+  durationSeconds: z.number().min(5).max(7200),
+  eyeContactRatio: z.number().min(0).max(1),
+  averageWpm: z.number().min(20).max(300),
+  fillerOccurrences: z.array(
+    z.object({
+      word: z.string(),
+      timestampSec: z.number(),
+      contextSnippet: z.string().default(""),
+    })
+  ).default([]),
+  judgeQuestions: z.array(z.any()).default([]),
+  dataCoverageRatio: z.number().min(0).max(1).default(0.95),
+  shoulderTiltVariance: z.number().default(4),
+  pitchF0StdDev: z.number().default(16),
+  averageRmsDecibels: z.number().default(-18),
+  rebuttalRounds: z.array(
+    z.object({
+      reactionTimeSeconds: z.number(),
+      score: z.number(),
+    })
+  ).default([]),
+  aiContentScore: z.number().min(0).max(20).optional(),
+  title: z.string().max(500).optional(),
+  scenario: z.string().max(50).optional(),
+  difficulty: z.string().max(50).optional(),
 });
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const parsed = ReportSaveSchema.safeParse(body);
+  const clientIp = req.headers.get("x-forwarded-for") || "client-local";
+  const rateLimit = rateLimiter.check(`report-save:${clientIp}`, 10, 60);
 
-    if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid report data", details: parsed.error.issues }, { status: 400 });
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Quá nhiều báo cáo. Vui lòng thử lại sau." },
+      { status: 429 }
+    );
+  }
+
+  const authSession = await getSessionFromRequest(req);
+  const userId = authSession?.userId;
+
+  // Only save reports for authenticated users
+  if (!userId) {
+    return NextResponse.json(
+      { success: true, saved: false, reason: "guest_mode" },
+      { status: 200 }
+    );
+  }
+
+  try {
+    const rawBody = await req.json();
+    const cleanBody = sanitizeNoSql(rawBody);
+    const parsed = SaveReportSchema.parse(cleanBody);
+
+    // Calculate MPRE evaluation
+    const evaluation = calculateMPREScore({
+      durationSeconds: parsed.durationSeconds,
+      totalWords: Math.round((parsed.durationSeconds / 60) * parsed.averageWpm),
+      faceDetectedFrames: 900,
+      totalAnalyzedFrames: 900,
+      eyeContactFrames: Math.round(900 * parsed.eyeContactRatio),
+      shoulderTiltVariance: parsed.shoulderTiltVariance,
+      averageRmsDecibels: parsed.averageRmsDecibels,
+      pitchF0StdDev: parsed.pitchF0StdDev,
+      fillerWordCount: parsed.fillerOccurrences.length,
+      aiContentScore: parsed.aiContentScore,
+      rebuttalRounds: parsed.rebuttalRounds,
+    });
+
+    // Ensure session exists in DB (create if needed, e.g. when client sends local_ prefixed IDs)
+    let dbSession = getSessionById(parsed.sessionId);
+    let sessionId = parsed.sessionId;
+
+    if (!dbSession) {
+      // Auto-create session record so foreign key is satisfied
+      const newSession = createSession({
+        userId,
+        title: parsed.title || "Buổi luyện tập",
+        scenario: parsed.scenario || "khkt_defense",
+        difficulty: parsed.difficulty || "balanced",
+        outlineText: "",
+      });
+      sessionId = newSession.id;
     }
 
-    const reportId = `rep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    // Save report to database
+    const report = saveReport(sessionId, userId, evaluation);
 
-    // Store report summary with strict Zero-Data Retention (zero raw audio/video files)
+    // Mark session as completed
+    completeSession(sessionId, userId, parsed.durationSeconds);
+
     return NextResponse.json({
       success: true,
-      reportId,
-      message: "Báo cáo chẩn đoán đã được lưu an toàn theo tiêu chuẩn Zero-Data Retention."
+      saved: true,
+      reportId: report.id,
+      evaluation,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Dữ liệu báo cáo không hợp lệ.", details: error.errors },
+        { status: 422 }
+      );
+    }
+    console.error("[Report Save Error]", error);
+    return NextResponse.json(
+      { error: "Không thể lưu báo cáo." },
+      { status: 500 }
+    );
   }
 }

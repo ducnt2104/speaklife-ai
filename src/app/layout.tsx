@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
 import { Navbar, Footer } from "@/components/ui/Navbar";
+import { AuthProvider } from "@/lib/auth/AuthContext";
 
 export const metadata: Metadata = {
   title: "SpeakLife AI — Phòng luyện phản xạ giao tiếp và thuyết trình thực chiến",
@@ -15,13 +16,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className="scroll-smooth">
-      <body className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-primary-light selection:text-primary">
-        <Navbar />
-        <main className="flex-1">
-          {children}
-        </main>
-        <Footer />
+    <html lang="vi" className="scroll-smooth" suppressHydrationWarning>
+      <body className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-primary-light selection:text-primary transition-colors duration-200">
+        <AuthProvider>
+          <Navbar />
+          <main className="flex-1">
+            {children}
+          </main>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

@@ -48,3 +48,9 @@ pnpm-debug.log*
 
 # Vercel Deployment Artifacts
 .vercel
+
+# SQLite Database (runtime data)
+/data/*.db
+/data/*.db-journal
+/data/*.db-wal
+/data/*.db-shm

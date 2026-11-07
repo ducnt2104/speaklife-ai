@@ -28,10 +28,10 @@ export const CameraHUD: React.FC<CameraHUDProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [eyeContactRatio, setEyeContactRatio] = useState<number>(82);
-  const [dbLevel, setDbLevel] = useState<number>(-18);
-  const [wpm, setWpm] = useState<number>(132);
-  const [isGazeCentered, setIsGazeCentered] = useState<boolean>(true);
+  const [eyeContactRatio, setEyeContactRatio] = useState<number>(0);
+  const [dbLevel, setDbLevel] = useState<number>(-60);
+  const [wpm, setWpm] = useState<number>(0);
+  const [isGazeCentered, setIsGazeCentered] = useState<boolean>(false);
 
   // Initialize Camera & Microphone Stream
   useEffect(() => {
