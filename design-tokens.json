@@ -1,0 +1,56 @@
+{
+  "name": "SpeakLife AI Design Tokens",
+  "version": "1.0.0",
+  "figmaSource": "https://www.figma.com/design/ICRiFjqNf4Iz9Fhqs1BIjm",
+  "tokens": {
+    "color": {
+      "brand": {
+        "primary": "#7C3AED",
+        "primaryHover": "#6D28D9",
+        "secondary": "#6366F1",
+        "accent": "#EC4899"
+      },
+      "surface": {
+        "background": "#F8FAFC",
+        "surface": "#FFFFFF",
+        "subtle": "#F1F5F9",
+        "card": "#FFFFFF",
+        "border": "#E2E8F0"
+      },
+      "text": {
+        "primary": "#0F172A",
+        "secondary": "#475569",
+        "muted": "#64748B",
+        "inverse": "#FFFFFF"
+      },
+      "status": {
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "danger": "#EF4444",
+        "info": "#06B6D4"
+      }
+    },
+    "typography": {
+      "fontHeading": "'Outfit', -apple-system, sans-serif",
+      "fontBody": "'Work Sans', -apple-system, sans-serif",
+      "fontMono": "'JetBrains Mono', 'Courier New', monospace"
+    },
+    "spacing": {
+      "1": "4px",
+      "2": "8px",
+      "3": "12px",
+      "4": "16px",
+      "5": "24px",
+      "6": "32px",
+      "8": "48px",
+      "12": "64px"
+    },
+    "radius": {
+      "sm": "4px",
+      "md": "8px",
+      "lg": "12px",
+      "xl": "16px",
+      "full": "9999px"
+    }
+  }
+}
