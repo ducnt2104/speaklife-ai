@@ -2,9 +2,7 @@
 
 import React, { useState } from "react";
 import { ShieldCheck, Lock, Cpu, EyeOff, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Button, Card, Badge } from "@/components/ui";
 
 export default function PrivacyPage() {
   const [isPurging, setIsPurging] = useState(false);

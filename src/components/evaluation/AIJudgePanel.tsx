@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Award, Clock, Send, Mic, Volume2, CheckCircle2, AlertTriangle } from "lucide-react";
-import { Button } from "../ui/Button";
-import { Badge } from "../ui/Badge";
+import { Button, Badge } from "@/components/ui";
 
 export interface AIJudgePanelProps {
   judgeName: string;

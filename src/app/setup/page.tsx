@@ -3,9 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { GraduationCap, Cpu, Globe, Award, FileText, ArrowRight, CheckCircle2, AlertCircle, Sparkles, ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Button, Card, Badge } from "@/components/ui";
 import { PRACTICE_SCENARIOS, DIFFICULTY_TIERS } from "@/lib/constants/scenarios";
 
 export default function SetupPage() {

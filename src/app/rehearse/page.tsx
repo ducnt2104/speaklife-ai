@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Pause, Square, Award, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Button, Card, Badge } from "@/components/ui";
 import { VirtualAuditorium } from "@/components/3d/VirtualAuditorium";
 import { CameraHUD } from "@/components/rehearsal/CameraHUD";
 import { AIJudgePanel } from "@/components/evaluation/AIJudgePanel";

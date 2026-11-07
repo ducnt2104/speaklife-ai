@@ -64,7 +64,11 @@ class InMemoryRateLimiter {
 
 export const rateLimiter = new InMemoryRateLimiter();
 
-// Scheduled cleanup every 15 minutes
+// Scheduled cleanup every 15 minutes with unref() to prevent keeping Node event loop alive during build
 if (typeof setInterval !== "undefined") {
-  setInterval(() => rateLimiter.cleanup(), 15 * 60 * 1000);
+  const cleanupTimer = setInterval(() => rateLimiter.cleanup(), 15 * 60 * 1000);
+  if (typeof (cleanupTimer as any).unref === "function") {
+    (cleanupTimer as any).unref();
+  }
 }
+

@@ -3,9 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLeft, Download, RotateCcw, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Button, Card, Badge } from "@/components/ui";
 import { MPRERadarChart } from "@/components/charts/MPRERadarChart";
 import { MPREEvaluationResult, calculateMPREScore } from "@/lib/rubric/mpre-calculator";
 

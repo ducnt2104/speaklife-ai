@@ -3,9 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { Play, BarChart3, Clock, Eye, Volume2, ShieldCheck, ArrowRight, Award, Plus, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Button, Card, Badge } from "@/components/ui";
 
 export default function DashboardPage() {
   const rehearsalHistory = [

@@ -1,9 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Mic2, ShieldCheck, Eye, Volume2, Award, ArrowRight, Play, CheckCircle2, Cpu, Sparkles, BarChart3, Users } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Button, Card, Badge } from "@/components/ui";
 import { MPRE_RUBRIC_DIMENSIONS } from "@/lib/constants/rubric";
 
 export default function HomePage() {

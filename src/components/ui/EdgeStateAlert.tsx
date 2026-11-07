@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertCircle, CameraOff, MicOff, WifiOff, RefreshCw } from "lucide-react";
-import { Button } from "./Button";
+import { Button } from "./button";
 
 export interface EdgeStateAlertProps {
   type: "camera_denied" | "mic_denied" | "webgl_failed" | "api_timeout" | "low_fps";
