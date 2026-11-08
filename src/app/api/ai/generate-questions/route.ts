@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
-import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
+import { getEffectiveGeminiApiKey } from "@/lib/db/ai-config";
+import { callGeminiWithFallback, extractCleanJson } from "@/lib/ai/gemini-gateway";
 
 const generateSchema = z.object({
   documentSummary: z.string().min(1, "Nội dung tóm tắt không được để trống").max(10000),
@@ -25,20 +26,14 @@ export async function POST(req: NextRequest) {
     const promptAudit = sanitizePromptInput(documentSummary, 5000);
 
     const apiKey = getEffectiveGeminiApiKey();
-    const model = getAIConfig().model || "gemini-2.0-flash";
     if (apiKey) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
+        const { data: aiData } = await callGeminiWithFallback(apiKey, {
+          contents: [
+            {
+              parts: [
                 {
-                  parts: [
-                    {
-                      text: `Bạn là giám khảo phản biện AI (Bối cảnh: ${scenario}, Độ khó: ${difficulty}).
+                  text: `Bạn là giám khảo phản biện AI (Bối cảnh: ${scenario}, Độ khó: ${difficulty}).
                       
 Tóm tắt bài thuyết trình:
 """${promptAudit.sanitizedText}"""
@@ -57,27 +52,24 @@ Hãy tạo 3 câu hỏi phản biện sắc bén và trả về JSON:
   ]
 }
 CHỈ trả về JSON.`,
-                    },
-                  ],
                 },
               ],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.5,
-              },
-            }),
-          }
-        );
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.5,
+            maxOutputTokens: 2048,
+          },
+        });
 
-        if (response.ok) {
-          const aiData = await response.json();
-          const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (jsonText) {
-            return NextResponse.json({
-              success: true,
-              data: { questions: JSON.parse(jsonText).questions || [] },
-            });
-          }
+        const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (jsonText) {
+          const parsed = extractCleanJson(jsonText);
+          return NextResponse.json({
+            success: true,
+            data: { questions: parsed.questions || [] },
+          });
         }
       } catch (err) {
         console.warn("Gemini generateQuestions fallback:", err);

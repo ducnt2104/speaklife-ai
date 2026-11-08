@@ -24,7 +24,7 @@ export async function GET() {
       ai: {
         status: aiConfig.last_status || (effectiveKey ? "CONFIGURED" : "NOT_CONFIGURED"),
         provider: "Google Gemini",
-        model: aiConfig.model || "gemini-2.0-flash",
+        model: aiConfig.model || "gemini-3.8-flash",
         isConfigured: Boolean(effectiveKey && effectiveKey.length > 0),
         lastTestedAt: aiConfig.last_tested_at,
         note: effectiveKey

@@ -6,7 +6,6 @@ const testSchema = z.object({
   apiKey: z.string().optional(),
   model: z.string().default("gemini-3.8-flash"),
 });
-
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   let requestedModel = "gemini-3.8-flash";
@@ -92,6 +91,43 @@ export async function POST(req: NextRequest) {
       } else if (status === 404) {
         classifiedStatus = "MODEL_ERROR";
         errorMessage = `Model ${requestedModel} không tồn tại hoặc tài khoản chưa được cấp quyền sử dụng.`;
+      } else if (status === 503) {
+        // Try fallback model gemini-3.5-flash-lite
+        const fallbackModel = "gemini-3.5-flash-lite";
+        const fallbackEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent?key=${testKey}`;
+        try {
+          const fallbackRes = await fetch(fallbackEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Kiểm tra kết nối SpeakLife AI. Phản hồi đúng 1 từ: PONG" }] }],
+              generationConfig: { maxOutputTokens: 10, temperature: 0.1 },
+            }),
+          });
+          const fallbackLatency = Date.now() - startTime;
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            const fallbackText = fallbackData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+            updateAIConfig({
+              lastStatus: "CONNECTED",
+              lastTestedAt: new Date().toISOString(),
+              model: fallbackModel,
+            });
+            return NextResponse.json({
+              success: true,
+              status: "CONNECTED",
+              latencyMs: fallbackLatency,
+              model: fallbackModel,
+              provider: "Google Gemini",
+              reply: fallbackText,
+              message: `Model ${requestedModel} đang quá tải (503). Đã kết nối thành công qua ${fallbackModel} (Độ trễ: ${fallbackLatency}ms)`,
+            });
+          }
+        } catch {
+          // Fallback also failed
+        }
+        classifiedStatus = "MODEL_OVERLOADED";
+        errorMessage = `Model ${requestedModel} đang quá tải (503). Vui lòng thử lại sau hoặc chọn model khác (gemini-3.5-flash-lite).`;
       }
     } catch {
       // JSON parse error

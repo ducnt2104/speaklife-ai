@@ -1,6 +1,8 @@
 /**
  * SpeakLife AI — Google Gemini Adversarial AI Gateway
- * Clean abstraction with Markdown JSON extraction, Token Budgets, Zod Schema Enforcement, and Dynamic Contextual Fallback.
+ * Multi-model fallback (gemini-3.8-flash → gemini-3.5-flash-lite),
+ * Markdown JSON extraction, Token Budgets, Zod Schema Enforcement,
+ * and Dynamic Contextual Fallback.
  */
 
 import { z } from "zod";
@@ -9,7 +11,28 @@ import { truncateSafe } from "@/lib/security/input-sanitizer";
 import { JudgeQuestion } from "@/lib/types";
 import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
 
-// Schema for Gemini Adversarial Questions Output
+// ── Model Configuration ──────────────────────────────────────
+/**
+ * Default model and ordered fallback list.
+ * When primary model returns 503 (overload) or 429 (rate limit),
+ * the gateway automatically retries with the next model.
+ */
+export const DEFAULT_MODEL = "gemini-3.8-flash";
+export const MODEL_FALLBACK_ORDER = ["gemini-3.8-flash", "gemini-3.5-flash-lite"] as const;
+
+/**
+ * Resolves the best model to use: DB config → default constant.
+ * Never falls back to deprecated models.
+ */
+export function resolveModel(): string {
+  const dbModel = getAIConfig().model;
+  if (dbModel && !dbModel.startsWith("gemini-2.0") && !dbModel.startsWith("gemini-1.")) {
+    return dbModel;
+  }
+  return DEFAULT_MODEL;
+}
+
+// ── Schemas ──────────────────────────────────────────────────
 export const JudgeQuestionsSchema = z.object({
   questions: z.array(
     z.object({
@@ -24,7 +47,6 @@ export const JudgeQuestionsSchema = z.object({
   ),
 });
 
-// Schema for Q&A Answer Evaluation Output
 export const AnswerEvaluationSchema = z.object({
   score: z.number().min(0).max(10),
   strengths: z.string(),
@@ -32,9 +54,10 @@ export const AnswerEvaluationSchema = z.object({
   suggestedResponse: z.string(),
 });
 
+// ── JSON Extraction ──────────────────────────────────────────
 /**
- * Robust JSON extraction helper that cleanly strips markdown code fences (```json ... ```)
- * and isolates JSON objects from surrounding text.
+ * Robust JSON extraction helper that cleanly strips markdown code fences
+ * (```json ... ```) and isolates JSON objects from surrounding text.
  */
 export function extractCleanJson<T = any>(text: string): T {
   if (!text || typeof text !== "string") {
@@ -75,18 +98,78 @@ export function extractCleanJson<T = any>(text: string): T {
   return JSON.parse(cleaned) as T;
 }
 
+// ── Multi-Model Fallback Call ────────────────────────────────
+/**
+ * Makes a Gemini API call with automatic model fallback on 503/429.
+ * Returns the raw response data or throws on unrecoverable errors.
+ */
+export async function callGeminiWithFallback(
+  apiKey: string,
+  requestBody: Record<string, unknown>,
+  opts?: { timeoutMs?: number }
+): Promise<{ data: any; model: string; latencyMs: number }> {
+  const primaryModel = resolveModel();
+  const models = [primaryModel, ...MODEL_FALLBACK_ORDER.filter(m => m !== primaryModel)];
+  const timeout = opts?.timeoutMs || 120_000;
+
+  let lastError: Error | null = null;
+
+  for (const model of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const startMs = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      const latencyMs = Date.now() - startMs;
+
+      if (res.ok) {
+        return { data: await res.json(), model, latencyMs };
+      }
+
+      // Retry-eligible errors: 503 (overload), 429 (rate limit)
+      if (res.status === 503 || res.status === 429) {
+        console.warn(`[GeminiGateway] ${model} returned ${res.status}, trying next model...`);
+        lastError = new Error(`${model}: HTTP ${res.status}`);
+        continue;
+      }
+
+      // Non-retryable error
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(`Gemini API ${res.status}: ${errBody?.error?.message || "Unknown error"}`);
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.warn(`[GeminiGateway] ${model} timed out after ${timeout}ms, trying next...`);
+        lastError = new Error(`${model}: timeout`);
+        continue;
+      }
+      if (err.message?.startsWith("Gemini API")) throw err;
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error("All Gemini models failed");
+}
+
+// ── Gateway Class ────────────────────────────────────────────
 export class GeminiGateway {
   private getApiKey(): string | null {
     return getEffectiveGeminiApiKey();
   }
 
-  private getEndpoint(): string {
-    const model = getAIConfig().model || "gemini-3.8-flash";
-    return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  }
-
   /**
-   * Generates 2-3 adversarial counter-questions targeted at vulnerabilities in the student's presentation outline.
+   * Generates 2-3 adversarial counter-questions targeted at vulnerabilities
+   * in the student's presentation outline.
+   * Uses automatic model fallback (gemini-3.8-flash → gemini-3.5-flash-lite).
    */
   public async generateCounterQuestions(
     title: string,
@@ -97,22 +180,20 @@ export class GeminiGateway {
     const cleanTitle = title?.trim() || "Đề tài nghiên cứu khoa học kỹ thuật";
     const cleanOutline = outlineText?.trim() || cleanTitle;
 
-    // Check for prompt injection
     const injectionCheck = detectPromptInjection(cleanOutline);
     if (injectionCheck.isSuspicious) {
-      console.warn(`[Prompt Guard Alert] Prompt injection pattern detected in outline: ${injectionCheck.matchedPattern}`);
+      console.warn(`[Prompt Guard Alert] Prompt injection detected: ${injectionCheck.matchedPattern}`);
     }
 
     const safeOutline = wrapUntrustedContent("presentation_outline", truncateSafe(cleanOutline, 4000));
 
     const apiKey = this.getApiKey();
-    // If no API key or in offline environment, return dynamic pedagogical questions tailored to the student's topic
     if (!apiKey) {
       return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
     }
 
     const systemPrompt = `
-Bạn là Ban Giám Khảo phản biện chuyên môn của cuộc thi KHKT và Gameshow “Đấu trường AI” dành cho học sinh THPT.
+Bạn là Ban Giám Khảo phản biện chuyên môn của cuộc thi KHKT và Gameshow "Đấu trường AI" dành cho học sinh THPT.
 Nhiệm vụ tối quan trọng: Đọc kỹ tiêu đề và nội dung bài thuyết trình của học sinh dưới đây, sau đó đặt đúng 2 câu hỏi phản biện ngắn gọn, sắc bén NHẮM TRỰC TIẾP VÀO ĐỀ TÀI VÀ NỘI DUNG NÀY.
 TUYỆT ĐỐI KHÔNG hỏi về các đề tài khác không liên quan. Mọi câu hỏi phải gắn liền với các thuật ngữ, phương pháp, và số liệu mà học sinh nêu trong dàn ý.
 
@@ -146,34 +227,23 @@ BẮT BUỘC trả về đúng định dạng JSON hợp lệ:
 `.trim();
 
     try {
-      const endpoint = this.getEndpoint();
-      const response = await fetch(`${endpoint}?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: systemPrompt },
-                { text: `Bối cảnh: ${scenario} | Độ khó: ${difficulty}\nTiêu đề đề tài: ${cleanTitle}\n${safeOutline}` },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 4096,
-            responseMimeType: "application/json",
+      const { data: rawData } = await callGeminiWithFallback(apiKey, {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: systemPrompt },
+              { text: `Bối cảnh: ${scenario} | Độ khó: ${difficulty}\nTiêu đề đề tài: ${cleanTitle}\n${safeOutline}` },
+            ],
           },
-        }),
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json",
+        },
       });
 
-      if (!response.ok) {
-        console.warn(`Gemini API returned status ${response.status}, using dynamic fallback for topic: ${cleanTitle}`);
-        return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
-      }
-
-      const rawData = await response.json();
       const rawText = rawData?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) {
         return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
@@ -187,13 +257,14 @@ BẮT BUỘC trả về đúng định dạng JSON hợp lệ:
         judgeAvatar: "",
       }));
     } catch (err) {
-      console.warn("Gemini call or JSON parse failed, utilizing dynamic contextual fallback", err);
+      console.warn("Gemini call failed, using dynamic contextual fallback", err);
       return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
     }
   }
 
   /**
    * Evaluates student's verbal/textual response to a counter-question.
+   * Uses automatic model fallback.
    */
   public async evaluateAnswer(
     questionText: string,
@@ -223,35 +294,25 @@ Trả về JSON:
 `.trim();
 
     try {
-      const endpoint = this.getEndpoint();
-      const response = await fetch(`${endpoint}?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [
-                { text: systemPrompt },
-                {
-                  text: `Câu hỏi phản biện: "${questionText}" (Mục tiêu: ${targetedFlaw})\nThời gian phản ứng: ${responseTimeSec}s\nCâu trả lời của học sinh: "${userAnswer}"`,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 2048,
-            responseMimeType: "application/json",
+      const { data: rawData } = await callGeminiWithFallback(apiKey, {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: systemPrompt },
+              {
+                text: `Câu hỏi phản biện: "${questionText}" (Mục tiêu: ${targetedFlaw})\nThời gian phản ứng: ${responseTimeSec}s\nCâu trả lời của học sinh: "${userAnswer}"`,
+              },
+            ],
           },
-        }),
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+          responseMimeType: "application/json",
+        },
       });
 
-      if (!response.ok) {
-        return this.getFallbackEvaluation(userAnswer, responseTimeSec);
-      }
-
-      const rawData = await response.json();
       const rawText = rawData?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) {
         return this.getFallbackEvaluation(userAnswer, responseTimeSec);
@@ -313,7 +374,7 @@ Trả về JSON:
         : "Nắm được câu hỏi, tuy nhiên còn ngập ngừng và thiếu dẫn chứng thực tế.",
       weaknesses: isDetailed
         ? "Có thể bổ sung thêm số liệu đo đạc cụ thể để câu trả lời thêm đanh thép."
-        : "Cần vận dụng cấu trúc: Lắng nghe $\\to$ Đưa số liệu thực nghiệm $\\to$ Khẳng định giải pháp.",
+        : "Cần vận dụng cấu trúc: Lắng nghe → Đưa số liệu thực nghiệm → Khẳng định giải pháp.",
       suggestedResponse:
         "Thưa Thầy/Cô, em hoàn toàn ghi nhận băn khoăn rất xác đáng của Hội đồng. Để giải quyết vấn đề này, nhóm chúng em đã tiến hành khảo sát và hiệu chuẩn ngưỡng thích ứng thực tế, qua đó chứng minh tính khả thi đạt trên 88%.",
     };

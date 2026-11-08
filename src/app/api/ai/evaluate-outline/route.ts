@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
-import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
+import { getEffectiveGeminiApiKey } from "@/lib/db/ai-config";
+import { callGeminiWithFallback, extractCleanJson } from "@/lib/ai/gemini-gateway";
 
 const OutlineRequestSchema = z.object({
   title: z.string().min(1).max(200),
@@ -37,20 +38,14 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = getEffectiveGeminiApiKey();
-    const model = getAIConfig().model || "gemini-2.0-flash";
     if (apiKey) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
+        const { data: aiData } = await callGeminiWithFallback(apiKey, {
+          contents: [
+            {
+              parts: [
                 {
-                  parts: [
-                    {
-                      text: `
+                  text: `
                       Bạn là Giám khảo AI của hệ thống SpeakLife AI. Hãy phân tích đề cương bài thuyết trình "${title}" (Bối cảnh: ${scenarioId}):
                       
                       <STUDENT_OUTLINE>
@@ -65,25 +60,21 @@ export async function POST(req: NextRequest) {
                         "rebuttalQuestions": string[] (2 câu hỏi phản biện sâu sắc bằng tiếng Việt)
                       }
                       `.trim()
-                    }
-                  ]
                 }
-              ],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.3
-              }
-            })
-          }
-        );
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.3,
+            maxOutputTokens: 4096,
+          },
+        });
 
-        if (response.ok) {
-          const aiData = await response.json();
-          const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (jsonText) {
-            const parsedOutput = JSON.parse(jsonText);
-            return NextResponse.json({ success: true, data: parsedOutput });
-          }
+        const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (jsonText) {
+          const parsedOutput = extractCleanJson(jsonText);
+          return NextResponse.json({ success: true, data: parsedOutput });
         }
       } catch (geminiErr) {
         console.warn("Gemini call failed, utilizing deterministic fallback:", geminiErr);

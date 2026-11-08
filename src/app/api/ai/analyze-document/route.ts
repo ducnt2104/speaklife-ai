@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
-import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
+import { getEffectiveGeminiApiKey } from "@/lib/db/ai-config";
+import { callGeminiWithFallback, extractCleanJson } from "@/lib/ai/gemini-gateway";
 
 const analyzeSchema = z.object({
   text: z.string().min(10, "Nội dung quá ngắn").max(50000, "Nội dung quá dài"),
@@ -23,20 +24,14 @@ export async function POST(req: NextRequest) {
     const promptAudit = sanitizePromptInput(text, 10000);
 
     const apiKey = getEffectiveGeminiApiKey();
-    const model = getAIConfig().model || "gemini-2.0-flash";
     if (apiKey) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
+        const { data: aiData } = await callGeminiWithFallback(apiKey, {
+          contents: [
+            {
+              parts: [
                 {
-                  parts: [
-                    {
-                      text: `Bạn là chuyên gia phân tích bài thuyết trình. Hãy phân tích nội dung sau và trả về JSON:
+                  text: `Bạn là chuyên gia phân tích bài thuyết trình. Hãy phân tích nội dung sau và trả về JSON:
                       
 """${promptAudit.sanitizedText}"""
 
@@ -53,27 +48,24 @@ Trả về JSON với cấu trúc chính xác:
 }
 ${language === "vi" ? "Trả lời bằng tiếng Việt." : "Answer in English."}
 CHỈ trả về JSON hợp lệ.`,
-                    },
-                  ],
                 },
               ],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.3,
-              },
-            }),
-          }
-        );
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.3,
+            maxOutputTokens: 4096,
+          },
+        });
 
-        if (response.ok) {
-          const aiData = await response.json();
-          const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (jsonText) {
-            return NextResponse.json({
-              success: true,
-              data: { analysis: JSON.parse(jsonText) },
-            });
-          }
+        const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (jsonText) {
+          const parsed = extractCleanJson(jsonText);
+          return NextResponse.json({
+            success: true,
+            data: { analysis: parsed },
+          });
         }
       } catch (err) {
         console.warn("Gemini analyzeDocument fallback:", err);

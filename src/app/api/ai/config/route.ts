@@ -4,8 +4,7 @@ import { z } from "zod";
 
 const AVAILABLE_MODELS = [
   { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash (Mặc định — Tốc độ cao)", speed: "Rất nhanh", tier: "Khuyên dùng" },
-  { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", speed: "Nhanh", tier: "Tiêu chuẩn" },
-  { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", speed: "Chuyên sâu", tier: "Nâng cao" },
+  { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash Lite (Nhanh & ổn định)", speed: "Nhanh", tier: "Tiêu chuẩn" },
 ];
 
 function maskKey(key: string | null): string {
@@ -23,7 +22,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       provider: config.provider || "gemini",
-      model: config.model || "gemini-2.0-flash",
+      model: config.model || "gemini-3.8-flash",
       isEnabled: Boolean(config.is_enabled),
       hasKey: Boolean(effectiveKey && effectiveKey.length > 0),
       maskedKey: maskKey(effectiveKey),

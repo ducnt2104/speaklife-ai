@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
-import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
+import { getEffectiveGeminiApiKey } from "@/lib/db/ai-config";
+import { callGeminiWithFallback, extractCleanJson } from "@/lib/ai/gemini-gateway";
 
 const evaluateSchema = z.object({
   question: z.string().min(1, "Thiếu câu hỏi"),
@@ -26,20 +27,14 @@ export async function POST(req: NextRequest) {
     const cleanQuestion = sanitizePromptInput(question, 500).sanitizedText;
 
     const apiKey = getEffectiveGeminiApiKey();
-    const model = getAIConfig().model || "gemini-2.0-flash";
     if (apiKey) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
+        const { data: aiData } = await callGeminiWithFallback(apiKey, {
+          contents: [
+            {
+              parts: [
                 {
-                  parts: [
-                    {
-                      text: `Bạn là giám khảo phản biện AI đánh giá câu trả lời của thí sinh.
+                  text: `Bạn là giám khảo phản biện AI đánh giá câu trả lời của thí sinh.
 
 Câu hỏi: "${cleanQuestion}"
 Câu trả lời của thí sinh: "${cleanAnswer}"
@@ -55,27 +50,24 @@ ${documentContext ? `Ngữ cảnh đề tài: "${documentContext.slice(0, 1000)}
   "suggestedImprovement": "gợi ý cải thiện dưới 50 từ bằng tiếng Việt"
 }
 CHỈ trả về JSON.`,
-                    },
-                  ],
                 },
               ],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.3,
-              },
-            }),
-          }
-        );
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.3,
+            maxOutputTokens: 2048,
+          },
+        });
 
-        if (response.ok) {
-          const aiData = await response.json();
-          const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (jsonText) {
-            return NextResponse.json({
-              success: true,
-              data: { evaluation: JSON.parse(jsonText) },
-            });
-          }
+        const jsonText = aiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (jsonText) {
+          const parsed = extractCleanJson(jsonText);
+          return NextResponse.json({
+            success: true,
+            data: { evaluation: parsed },
+          });
         }
       } catch (err) {
         console.warn("Gemini evaluateResponse fallback:", err);
