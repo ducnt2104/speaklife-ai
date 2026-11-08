@@ -170,6 +170,8 @@ export class GeminiGateway {
    * Generates 2-3 adversarial counter-questions targeted at vulnerabilities
    * in the student's presentation outline.
    * Uses automatic model fallback (gemini-3.8-flash → gemini-3.5-flash-lite).
+   * 
+   * V2.0: 3 Persona Judges with Bloom taxonomy question stratification.
    */
   public async generateCounterQuestions(
     title: string,
@@ -192,35 +194,56 @@ export class GeminiGateway {
       return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
     }
 
+    // Determine number of judges based on difficulty
+    const judgeCount = difficulty === "adversarial" ? 3 : difficulty === "standard" ? 2 : 2;
+
     const systemPrompt = `
-Bạn là Ban Giám Khảo phản biện chuyên môn của cuộc thi KHKT và Gameshow "Đấu trường AI" dành cho học sinh THPT.
-Nhiệm vụ tối quan trọng: Đọc kỹ tiêu đề và nội dung bài thuyết trình của học sinh dưới đây, sau đó đặt đúng 2 câu hỏi phản biện ngắn gọn, sắc bén NHẮM TRỰC TIẾP VÀO ĐỀ TÀI VÀ NỘI DUNG NÀY.
-TUYỆT ĐỐI KHÔNG hỏi về các đề tài khác không liên quan. Mọi câu hỏi phải gắn liền với các thuật ngữ, phương pháp, và số liệu mà học sinh nêu trong dàn ý.
+Bạn là Ban Giám Khảo phản biện chuyên môn đa giác quan của cuộc thi KHKT và Gameshow "Đấu trường AI" dành cho học sinh THPT.
 
-Các thành viên Ban Giám Khảo:
-1. Thầy Vũ Xuân Định (Chuyên gia Phương pháp luận & Toán học): Chất vấn tính khả thi, độ tin cậy và số liệu đối chứng.
-2. Cô Nguyễn Thị Thu Hà (Chuyên gia Ngôn ngữ & Sư phạm): Chất vấn chiều sâu nội dung và tính ứng dụng thực tiễn.
+## HỘI ĐỒNG 3 GIÁM KHẢO CHUYÊN BIỆT
 
-BẮT BUỘC trả về đúng định dạng JSON hợp lệ:
+### Giám khảo A — PGS.TS Trần Minh Khoa (Nhà Khoa học Khắt khe)
+- Chuyên môn: Phương pháp luận nghiên cứu, thống kê thực nghiệm, logic nhân quả
+- Phong cách: Xoáy sâu vào tính chính xác số liệu, nguồn gốc thông tin, thiết kế thực nghiệm
+- Màu sắc avatar: bg-blue-600
+
+### Giám khảo B — ThS. Lê Hoàng Yến (Chuyên gia Thực tế & Nhà Đầu tư)
+- Chuyên môn: Tính khả thi, chi phí triển khai, rào cản người dùng, khả năng thương mại hóa
+- Phong cách: Chất vấn về ứng dụng thực tiễn trong môi trường học đường và đời sống
+- Màu sắc avatar: bg-emerald-600
+
+### Giám khảo C — TS. Hoàng Đức Anh (Người Phản biện Đối lập - Devil's Advocate)
+- Chuyên môn: Tìm edge cases, phản ví dụ, góc nhìn trái chiều, điều kiện biên
+- Phong cách: Đặt giả định ngược, stress-test bản lĩnh bảo vệ quan điểm
+- Màu sắc avatar: bg-rose-600
+
+## PHÂN TẦNG CÂU HỎI THEO THANG TƯ DUY BLOOM
+
+Mỗi câu hỏi PHẢI thuộc 1 trong 2 cấp:
+- **Cấp 1 (Phân tích — Deep Dive):** Yêu cầu làm rõ luận điểm mơ hồ, dẫn chứng thiếu, hoặc phương pháp chưa rõ ràng. Bắt đầu bằng "Hãy giải thích...", "Cơ sở nào...", "Làm sao chứng minh..."
+- **Cấp 2 (Ứng biến — Stress Test):** Đặt giả định khi điều kiện thay đổi hoàn toàn, buộc học sinh phản xạ giải quyết. Bắt đầu bằng "Nếu xảy ra...", "Giả sử...", "Khi điều kiện X thay đổi..."
+
+## NHIỆM VỤ
+Đọc kỹ tiêu đề và nội dung bài thuyết trình, sau đó đặt đúng ${judgeCount} câu hỏi phản biện.
+
+LUẬT BẮT BUỘC:
+1. Mọi câu hỏi PHẢI gắn liền với thuật ngữ, phương pháp, số liệu CỤ THỂ trong dàn ý. Ví dụ: "Ở phần X bạn nhắc đến giải pháp Y, nhưng nếu xảy ra trường hợp Z thì sao?"
+2. TUYỆT ĐỐI KHÔNG hỏi chung chung hoặc về đề tài khác.
+3. Câu hỏi phải CÁ NHÂN HÓA 100% — trích xuất chi tiết thực tế từ bài nói.
+4. Nếu bối cảnh là ${difficulty === "adversarial" ? "Khắt khe" : difficulty === "standard" ? "Chuẩn mực" : "Đồng hành"}, điều chỉnh mức độ gay gắt phù hợp.
+
+BẮT BUỘC trả về JSON hợp lệ:
 {
   "questions": [
     {
       "id": "q1",
-      "judgeName": "Thầy Vũ Xuân Định",
-      "judgeRole": "Giám khảo Phương pháp luận",
-      "avatarColor": "bg-brand-primary",
-      "questionText": "<Câu hỏi chất vấn cụ thể gắn liền với đề tài>",
-      "targetedFlaw": "<Lỗ hổng luận cứ hoặc điều kiện biên cần làm rõ>",
-      "timeLimitSec": 30
-    },
-    {
-      "id": "q2",
-      "judgeName": "Cô Nguyễn Thị Thu Hà",
-      "judgeRole": "Giám khảo Sư phạm & Ứng dụng",
-      "avatarColor": "bg-brand-secondary",
-      "questionText": "<Câu hỏi chất vấn chiều sâu ứng dụng thực tiễn của đề tài>",
-      "targetedFlaw": "<Tính khả thi trong môi trường thực tế>",
-      "timeLimitSec": 30
+      "judgeName": "<Tên giám khảo>",
+      "judgeRole": "<Vai trò>",
+      "avatarColor": "<bg-xxx-600>",
+      "bloomLevel": "<Phân tích hoặc Ứng biến>",
+      "questionText": "<Câu hỏi CỤ THỂ gắn liền đề tài>",
+      "targetedFlaw": "<Lỗ hổng cụ thể đang nhắm tới>",
+      "timeLimitSec": ${difficulty === "adversarial" ? 25 : difficulty === "standard" ? 35 : 45}
     }
   ]
 }
@@ -238,7 +261,7 @@ BẮT BUỘC trả về đúng định dạng JSON hợp lệ:
           },
         ],
         generationConfig: {
-          temperature: 0.2,
+          temperature: 0.25,
           maxOutputTokens: 4096,
           responseMimeType: "application/json",
         },
@@ -328,7 +351,7 @@ Trả về JSON:
   /**
    * Dynamic contextual fallback questions:
    * Generates questions calibrated strictly to the user's title and outline,
-   * completely avoiding hardcoded mock topics when the user enters their own project.
+   * using 3 Persona Judges with Bloom taxonomy stratification.
    */
   private getFallbackQuestions(
     title: string,
@@ -339,28 +362,44 @@ Trả về JSON:
     const topic = title.trim() || "đề tài nghiên cứu";
     const snippet = outlineText.trim().slice(0, 100);
 
-    return [
+    const questions: JudgeQuestion[] = [
       {
         id: "q1",
-        judgeName: "Thầy Vũ Xuân Định",
-        judgeRole: "Giám khảo Phương pháp luận & Thực nghiệm",
-        avatarColor: "bg-brand-primary",
-        questionText: `Đối với đề tài "${topic}", cơ sở thực nghiệm và thông số đo lường nào giúp nhóm chứng minh giải pháp đạt độ chính xác và tính ổn định cao trong điều kiện thực tế?`,
-        targetedFlaw: "Điều kiện biên và tính ổn định thực nghiệm của giải pháp",
-        timeLimitSec: 30,
+        judgeName: "PGS.TS Trần Minh Khoa",
+        judgeRole: "Nhà Khoa học — Phương pháp luận & Thực nghiệm",
+        avatarColor: "bg-blue-600",
+        questionText: `Đối với đề tài "${topic}", cơ sở thực nghiệm và thông số đo lường nào giúp nhóm chứng minh giải pháp đạt độ chính xác và tính ổn định cao trong điều kiện thực tế? Xin trình bày rõ phương pháp thu thập dữ liệu và mẫu đối chứng.`,
+        targetedFlaw: "Thiết kế thực nghiệm và tính tin cậy thống kê của kết quả",
+        timeLimitSec: difficulty === "adversarial" ? 25 : 35,
         judgeAvatar: "",
       },
       {
         id: "q2",
-        judgeName: "Cô Nguyễn Thị Thu Hà",
-        judgeRole: "Giám khảo Sư phạm & Ứng dụng",
-        avatarColor: "bg-brand-secondary",
-        questionText: `Trong nội dung "${snippet || topic}", nếu hội đồng cho rằng chi phí triển khai hoặc mức độ tiếp cận của người dùng là rào cản lớn, bạn sẽ bảo vệ tính khả thi của dự án như thế nào?`,
-        targetedFlaw: "Tính khả thi thực tiễn và tính kinh tế của giải pháp",
-        timeLimitSec: 30,
+        judgeName: "ThS. Lê Hoàng Yến",
+        judgeRole: "Chuyên gia Thực tế & Khả thi",
+        avatarColor: "bg-emerald-600",
+        questionText: `Trong nội dung "${snippet || topic}", nếu hội đồng cho rằng chi phí triển khai hoặc mức độ tiếp cận của người dùng là rào cản lớn, bạn sẽ bảo vệ tính khả thi của dự án như thế nào? Đã thử nghiệm với bao nhiêu đối tượng thực tế?`,
+        targetedFlaw: "Tính khả thi thực tiễn, chi phí và khả năng tiếp cận người dùng",
+        timeLimitSec: difficulty === "adversarial" ? 25 : 35,
         judgeAvatar: "",
       },
     ];
+
+    // Add 3rd judge for adversarial difficulty
+    if (difficulty === "adversarial") {
+      questions.push({
+        id: "q3",
+        judgeName: "TS. Hoàng Đức Anh",
+        judgeRole: "Phản biện Đối lập (Devil's Advocate)",
+        avatarColor: "bg-rose-600",
+        questionText: `Giả sử một nhóm nghiên cứu khác đã phát triển giải pháp tương tự "${topic}" nhưng đạt hiệu quả cao hơn 30%, điều gì khiến giải pháp của bạn vẫn có giá trị riêng? Và nếu toàn bộ giả thiết ban đầu bị bác bỏ, bạn có phương án B nào không?`,
+        targetedFlaw: "Lợi thế cạnh tranh và kịch bản worst-case khi giả thiết sai",
+        timeLimitSec: 25,
+        judgeAvatar: "",
+      });
+    }
+
+    return questions;
   }
 
   private getFallbackEvaluation(userAnswer: string, responseTimeSec: number) {

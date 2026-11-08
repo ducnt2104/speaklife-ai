@@ -31,6 +31,13 @@ const PresentationEvalSchema = z.object({
   eyeContactFrames: z.number().default(450),
   shoulderTiltVariance: z.number().default(4),
   averageRmsDecibels: z.number().default(-18),
+  // Loudness dynamics data
+  loudnessAvgDbfs: z.number().optional(),
+  loudnessPeakDbfs: z.number().optional(),
+  loudnessDynamicContrast: z.number().optional(),
+  loudnessOptimalPercent: z.number().optional(),
+  loudnessTooQuietPercent: z.number().optional(),
+  loudnessTooLoudPercent: z.number().optional(),
   // Topic context
   presentationTitle: z.string().max(500).default(""),
   scenario: z.string().max(100).default("stem_khkt"),
@@ -48,6 +55,17 @@ function buildEvalPrompt(input: z.infer<typeof PresentationEvalSchema>): string 
       ).join("\n")
     : "Không phát hiện từ đệm nào.";
 
+  // Build loudness section if data available
+  const loudnessSection = input.loudnessAvgDbfs != null
+    ? `
+- **Âm lượng trung bình**: ${input.loudnessAvgDbfs} dBFS ${input.loudnessAvgDbfs >= -18 && input.loudnessAvgDbfs <= -12 ? "(Tối ưu)" : input.loudnessAvgDbfs < -26 ? "(Quá nhỏ)" : input.loudnessAvgDbfs > -6 ? "(Quá to)" : "(Chấp nhận được)"}
+- **Đỉnh âm lượng**: ${input.loudnessPeakDbfs ?? "N/A"} dBFS
+- **Độ biến thiên âm lượng (Dynamic Contrast)**: ${input.loudnessDynamicContrast ?? 0} dB ${(input.loudnessDynamicContrast ?? 0) < 2 ? "(Đơn điệu)" : (input.loudnessDynamicContrast ?? 0) > 12 ? "(Dao động mạnh)" : "(Tốt)"}
+- **Thời gian ở vùng tối ưu**: ${input.loudnessOptimalPercent ?? 0}%
+- **Thời gian nói quá nhỏ**: ${input.loudnessTooQuietPercent ?? 0}%
+- **Thời gian nói quá to**: ${input.loudnessTooLoudPercent ?? 0}%`
+    : `- **Âm lượng trung bình**: ${input.averageRmsDecibels} dB (chỉ có dữ liệu RMS cơ bản)`;
+
   return `Bạn là Giám khảo Đánh giá Bài Thuyết trình AI, chuyên gia phân tích kỹ năng trình bày theo Ma trận GDPT 2018.
 
 ## DỮ LIỆU THỰC NGHIỆM (GROUND TRUTH - ĐO TỪ CẢM BIẾN, KHÔNG ĐƯỢC THAY ĐỔI)
@@ -59,6 +77,9 @@ function buildEvalPrompt(input: z.infer<typeof PresentationEvalSchema>): string 
 - **Âm lượng trung bình**: ${input.averageRmsDecibels} dB
 - **Biến thiên tư thế vai**: ${input.shoulderTiltVariance}° 
 - **Đề tài**: "${input.presentationTitle || "Nghiên cứu khoa học kỹ thuật"}"
+
+## DỮ LIỆU ĐỘNG LỰC HỌC ÂM LƯỢNG (LOUDNESS DYNAMICS)
+${loudnessSection}
 
 ## DANH SÁCH TỪ ĐỆM CỤ THỂ (ĐÃ BẮT ĐƯỢC TỪ AUDIO)
 ${fillerSummary}
@@ -100,7 +121,9 @@ Trả về ĐÚNG JSON sau, KHÔNG có text thừa:
   "fillerFeedback": "<nhận xét dựa trên ${input.fillerOccurrences.length} từ đệm cụ thể đã liệt kê ở trên, PHẢI trích dẫn từ đệm nào xuất hiện nhiều nhất>",
   "topStrengths": ["<điểm mạnh 1 + trích dẫn>", "<điểm mạnh 2 + trích dẫn>"],
   "topWeaknesses": ["<điểm yếu 1 + trích dẫn>", "<điểm yếu 2 + trích dẫn>"],
-  "actionableDrills": ["<bài tập cụ thể 1>", "<bài tập cụ thể 2>"]
+  "actionableDrills": ["<bài tập cụ thể 1>", "<bài tập cụ thể 2>"],
+  "loudnessScore": <number 0-10, đánh giá dựa trên dữ liệu Loudness Dynamics ở trên>,
+  "loudnessFeedback": "<nhận xét cụ thể về âm lượng, PHẢI nêu con số dBFS, thời gian quá nhỏ/to, và gợi ý cải thiện>"
 }`;
 }
 
@@ -158,6 +181,8 @@ export async function POST(req: NextRequest) {
             topStrengths: evaluation.topStrengths || [],
             topWeaknesses: evaluation.topWeaknesses || [],
             actionableDrills: evaluation.actionableDrills || [],
+            loudnessScore: Math.min(10, Math.max(0, Number(evaluation.loudnessScore) || 5)),
+            loudnessFeedback: evaluation.loudnessFeedback || "",
           },
           meta: { model, latencyMs },
         });

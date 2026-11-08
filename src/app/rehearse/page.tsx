@@ -4,10 +4,11 @@ import React, { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Play, Pause, Square, Award, ShieldCheck, CheckCircle2, ArrowRight, Mic, Volume2 } from "lucide-react";
-import { Button, Card, Badge, MathText } from "@/components/ui";
+import { Button, Card, Badge, MathText, ErrorBoundary } from "@/components/ui";
 import { calculateMPREScore } from "@/lib/rubric/mpre-calculator";
 import { PRACTICE_SCENARIOS, DIFFICULTY_TIERS } from "@/lib/constants/scenarios";
 import { detectFillerWords } from "@/lib/audio/filler-detector";
+import { generateMicroDrills } from "@/lib/ai/micro-drill-generator";
 
 // ── Dynamic imports for heavy components (code-split) ──
 // Three.js VirtualAuditorium (~509 KB) — loaded only when rehearse page mounts
@@ -329,6 +330,13 @@ export default function RehearsePage() {
             averageRmsDecibels: dbLevel,
             presentationTitle: outlineTitle,
             scenario: scenarioId,
+            // Loudness dynamics data from LoudnessDynamicsEngine
+            loudnessAvgDbfs: (window as any).__speaklife_loudnessAvgDbfs,
+            loudnessPeakDbfs: (window as any).__speaklife_loudnessPeakDbfs,
+            loudnessDynamicContrast: (window as any).__speaklife_loudnessDynamicContrast,
+            loudnessOptimalPercent: (window as any).__speaklife_loudnessOptimalPercent,
+            loudnessTooQuietPercent: (window as any).__speaklife_loudnessTooQuietPercent,
+            loudnessTooLoudPercent: (window as any).__speaklife_loudnessTooLoudPercent,
           }),
         });
         if (evalRes.ok) {
@@ -363,6 +371,42 @@ export default function RehearsePage() {
         transcript: finalTranscript,
         fillerInstances: actualFillers,
       };
+
+      // Generate AI Micro-Drills from MPRE results + loudness data
+      try {
+        const loudnessData = {
+          currentDbfs: (window as any).__speaklife_loudnessAvgDbfs ?? -60,
+          peakDbfs: (window as any).__speaklife_loudnessPeakDbfs ?? -60,
+          averageDbfs: (window as any).__speaklife_loudnessAvgDbfs ?? -60,
+          dynamicRange: 0,
+          dynamicContrast: (window as any).__speaklife_loudnessDynamicContrast ?? 0,
+          zone: ((window as any).__speaklife_loudnessZone ?? "silent") as any,
+          zoneInfo: { label: "", color: "", icon: "" },
+          loudnessScore: (window as any).__speaklife_loudnessScore ?? 0,
+          loudnessFeedback: (window as any).__speaklife_loudnessFeedback ?? "",
+          sampleCount: 0,
+          optimalZonePercent: (window as any).__speaklife_loudnessOptimalPercent ?? 0,
+          tooQuietPercent: (window as any).__speaklife_loudnessTooQuietPercent ?? 0,
+          tooLoudPercent: (window as any).__speaklife_loudnessTooLoudPercent ?? 0,
+        };
+        const microDrills = generateMicroDrills(evaluation, loudnessData);
+        if (enrichedEvaluation.aiAnalysis) {
+          enrichedEvaluation.aiAnalysis.microDrills = microDrills;
+        } else {
+          enrichedEvaluation.aiAnalysis = { microDrills };
+        }
+        // Store loudness summary in aiAnalysis for report display
+        if (enrichedEvaluation.aiAnalysis && loudnessData.averageDbfs !== undefined) {
+          enrichedEvaluation.aiAnalysis.loudnessAvgDbfs = loudnessData.averageDbfs;
+          enrichedEvaluation.aiAnalysis.loudnessDynamicContrast = loudnessData.dynamicContrast;
+          enrichedEvaluation.aiAnalysis.loudnessOptimalPercent = loudnessData.optimalZonePercent;
+          enrichedEvaluation.aiAnalysis.loudnessPeakDbfs = loudnessData.peakDbfs;
+          enrichedEvaluation.aiAnalysis.loudnessScore = loudnessData.loudnessScore;
+          enrichedEvaluation.aiAnalysis.loudnessFeedback = loudnessData.loudnessFeedback;
+        }
+      } catch (drillErr) {
+        console.warn("Micro-drill generation skipped:", drillErr);
+      }
 
       sessionStorage.setItem("speaklife_final_report", JSON.stringify(enrichedEvaluation));
       sessionStorage.setItem("speaklife_final_transcript", finalTranscript);
@@ -453,7 +497,9 @@ export default function RehearsePage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: 3D Virtual Auditorium (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-4">
-          <VirtualAuditorium audienceReaction={audienceReaction} className="w-full aspect-video min-h-[380px]" />
+          <ErrorBoundary fallbackTitle="Khán phòng 3D gặp lỗi" fallbackMessage="Trình duyệt không hỗ trợ WebGL hoặc thiếu bộ nhớ GPU. Bạn vẫn có thể luyện tập bình thường.">
+            <VirtualAuditorium audienceReaction={audienceReaction} className="w-full aspect-video min-h-[380px]" />
+          </ErrorBoundary>
 
           {/* Real-time Subtitles / Telemetry Bar */}
           <div className="bg-surface p-4 rounded-xl border border-border text-xs text-text-secondary flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -480,6 +526,7 @@ export default function RehearsePage() {
         {/* Right Column: Camera HUD or AI Judge (5 Cols) */}
         <div className="lg:col-span-5 flex flex-col gap-4">
           {rehearsalPhase !== "qna" ? (
+            <ErrorBoundary fallbackTitle="Camera/Mic gặp lỗi" fallbackMessage="Không thể truy cập camera hoặc microphone. Kiểm tra quyền truy cập trong trình duyệt.">
             <CameraHUD
               isPracticing={rehearsalPhase === "presenting" && !isPaused}
               externalWpm={wpm}
@@ -493,9 +540,38 @@ export default function RehearsePage() {
                 if (m.silenceRatio !== undefined) {
                   (window as any).__speaklife_silenceRatio = m.silenceRatio;
                 }
+                // Store loudness dynamics metrics
+                if (m.loudnessZone !== undefined) {
+                  (window as any).__speaklife_loudnessZone = m.loudnessZone;
+                }
+                if (m.loudnessAvgDbfs !== undefined) {
+                  (window as any).__speaklife_loudnessAvgDbfs = m.loudnessAvgDbfs;
+                }
+                if (m.loudnessDynamicContrast !== undefined) {
+                  (window as any).__speaklife_loudnessDynamicContrast = m.loudnessDynamicContrast;
+                }
+                if (m.loudnessOptimalPercent !== undefined) {
+                  (window as any).__speaklife_loudnessOptimalPercent = m.loudnessOptimalPercent;
+                }
+                if (m.loudnessTooQuietPercent !== undefined) {
+                  (window as any).__speaklife_loudnessTooQuietPercent = m.loudnessTooQuietPercent;
+                }
+                if (m.loudnessTooLoudPercent !== undefined) {
+                  (window as any).__speaklife_loudnessTooLoudPercent = m.loudnessTooLoudPercent;
+                }
+                if (m.loudnessPeakDbfs !== undefined) {
+                  (window as any).__speaklife_loudnessPeakDbfs = m.loudnessPeakDbfs;
+                }
+                if (m.loudnessScore !== undefined) {
+                  (window as any).__speaklife_loudnessScore = m.loudnessScore;
+                }
+                if (m.loudnessFeedback !== undefined) {
+                  (window as any).__speaklife_loudnessFeedback = m.loudnessFeedback;
+                }
               }}
               className="w-full"
             />
+            </ErrorBoundary>
           ) : (
             <AIJudgePanel
               judgeName={difficulty.judgeName}

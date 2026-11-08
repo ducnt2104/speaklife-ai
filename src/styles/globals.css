@@ -58,3 +58,59 @@
 .font-size-large {
   font-size: 18px;
 }
+
+
+/* ── Print-optimized styles for PDF export ── */
+@media print {
+  /* Hide navigation, controls, and interactive elements */
+  nav, header, footer,
+  .print\:hidden,
+  button:not(.print-visible),
+  [data-driver-popover],
+  .fixed,
+  .sticky {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt !important;
+    line-height: 1.5 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Expand all content to full width */
+  .max-w-6xl, .max-w-2xl, .max-w-4xl {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Ensure cards and grids don't break across pages */
+  .break-inside-avoid,
+  [class*="Card"],
+  [class*="card"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Charts should be visible with forced colors */
+  canvas {
+    max-width: 100% !important;
+    break-inside: avoid;
+  }
+
+  /* Page margins */
+  @page {
+    margin: 1.5cm 1cm;
+    size: A4;
+  }
+
+  /* Force background colors for badges and status indicators */
+  .bg-emerald-50, .bg-cyan-50, .bg-orange-50, .bg-violet-50,
+  .bg-amber-50, .bg-blue-50, .bg-rose-50 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

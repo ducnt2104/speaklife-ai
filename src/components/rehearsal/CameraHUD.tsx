@@ -14,6 +14,15 @@ export interface CameraHUDProps {
     postureStable: boolean;
     pitchVariance?: number;
     silenceRatio?: number;
+    loudnessZone?: string;
+    loudnessAvgDbfs?: number;
+    loudnessDynamicContrast?: number;
+    loudnessOptimalPercent?: number;
+    loudnessTooQuietPercent?: number;
+    loudnessTooLoudPercent?: number;
+    loudnessPeakDbfs?: number;
+    loudnessScore?: number;
+    loudnessFeedback?: string;
   }) => void;
   className?: string;
   onPermissionDenied?: () => void;
@@ -31,6 +40,7 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
   const streamRef = useRef<MediaStream | null>(null);
   const analyzerRef = useRef<FastGazeAnalyzer | null>(null);
   const localAudioRef = useRef<any>(null);
+  const loudnessRef = useRef<any>(null);
 
   // Hardware and Permission State
   const [hasVideoPermission, setHasVideoPermission] = useState<boolean | null>(null);
@@ -134,6 +144,10 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
           const avg = sum / pcmData.length;
           const currentDb = Math.round(avg > 0 ? 20 * Math.log10(avg / 255) : -60);
           setDbLevel(currentDb);
+          // Feed into Loudness Dynamics Engine
+          if (loudnessRef.current) {
+            loudnessRef.current.record(currentDb);
+          }
           requestAnimationFrame(checkAudio);
         };
         checkAudio();
@@ -146,6 +160,14 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
           localAudioRef.current = analyzer;
         } catch (meydaErr) {
           console.warn("Local Audio AI (Meyda) failed to initialize, using fallback:", meydaErr);
+        }
+
+        // Start Loudness Dynamics Engine
+        try {
+          const { LoudnessDynamicsEngine } = await import("@/lib/audio/loudness-dynamics");
+          loudnessRef.current = new LoudnessDynamicsEngine();
+        } catch (loudnessErr) {
+          console.warn("Loudness Dynamics Engine failed to initialize:", loudnessErr);
         }
       } catch (audioErr) {
         console.warn("Microphone stream request failed:", audioErr);
@@ -169,6 +191,10 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
       if (localAudioRef.current) {
         localAudioRef.current.stop();
         localAudioRef.current = null;
+      }
+      if (loudnessRef.current) {
+        loudnessRef.current.reset();
+        loudnessRef.current = null;
       }
     };
   }, [selectedDeviceId, refreshDevices, onPermissionDenied]);
@@ -217,6 +243,16 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
       // Get enhanced metrics from Local Audio AI if available
       let pitchVariance: number | undefined;
       let silenceRatio: number | undefined;
+      let loudnessZone: string | undefined;
+      let loudnessAvgDbfs: number | undefined;
+      let loudnessDynamicContrast: number | undefined;
+      let loudnessOptimalPercent: number | undefined;
+      let loudnessTooQuietPercent: number | undefined;
+      let loudnessTooLoudPercent: number | undefined;
+      let loudnessPeakDbfs: number | undefined;
+      let loudnessScore: number | undefined;
+      let loudnessFeedback: string | undefined;
+
       if (localAudioRef.current) {
         try {
           const audioMetrics = localAudioRef.current.getMetrics();
@@ -227,6 +263,23 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
         }
       }
 
+      if (loudnessRef.current) {
+        try {
+          const lm = loudnessRef.current.getMetrics();
+          loudnessZone = lm.zone;
+          loudnessAvgDbfs = lm.averageDbfs;
+          loudnessDynamicContrast = lm.dynamicContrast;
+          loudnessOptimalPercent = lm.optimalZonePercent;
+          loudnessTooQuietPercent = lm.tooQuietPercent;
+          loudnessTooLoudPercent = lm.tooLoudPercent;
+          loudnessPeakDbfs = lm.peakDbfs;
+          loudnessScore = lm.loudnessScore;
+          loudnessFeedback = lm.loudnessFeedback;
+        } catch {
+          // Fallback
+        }
+      }
+
       onMetricsUpdate?.({
         eyeContactRatio,
         wpm: externalWpm,
@@ -234,6 +287,15 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
         postureStable: gazeStatus !== "distracted",
         pitchVariance,
         silenceRatio,
+        loudnessZone,
+        loudnessAvgDbfs,
+        loudnessDynamicContrast,
+        loudnessOptimalPercent,
+        loudnessTooQuietPercent,
+        loudnessTooLoudPercent,
+        loudnessPeakDbfs,
+        loudnessScore,
+        loudnessFeedback,
       });
     }, 1000);
     return () => clearInterval(interval);

@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLeft, Download, RotateCcw, Sparkles, Loader2 } from "lucide-react";
+import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLeft, Download, RotateCcw, Sparkles, Loader2, Mic, Target, Timer, FileDown } from "lucide-react";
 import { Button, Card, Badge, MathText } from "@/components/ui";
 import { MPRERadarChart } from "@/components/charts/MPRERadarChart";
 import { MPREEvaluationResult } from "@/lib/rubric/mpre-calculator";
@@ -298,11 +298,82 @@ function ReportContent() {
         </Card>
       )}
 
-      {/* Actionable Micro-Drills Recommendation Box */}
+      {/* Loudness & Vocal Dynamics Analysis */}
+      {aiAnalysis && aiAnalysis.loudnessFeedback && (
+        <Card className="p-6 bg-cyan-50/60 dark:bg-cyan-950/20 border-cyan-200 dark:border-cyan-800">
+          <h3 className="font-heading font-bold text-foreground text-lg flex items-center gap-2 mb-4">
+            <Mic className="w-5 h-5 text-cyan-600 dark:text-cyan-400" />
+            <span>Phân Tích Động Lực Học Âm Lượng</span>
+            {aiAnalysis.loudnessScore !== undefined && (
+              <Badge variant={aiAnalysis.loudnessScore >= 7 ? "success" : aiAnalysis.loudnessScore >= 4 ? "warning" : "danger"} className="ml-auto text-xs px-2.5 py-0.5">
+                {aiAnalysis.loudnessScore}/10
+              </Badge>
+            )}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            {aiAnalysis.loudnessAvgDbfs !== undefined && (
+              <div className="bg-surface p-3 rounded-xl border border-cyan-100 dark:border-cyan-800 text-center">
+                <div className="text-xs text-text-muted mb-1">Trung bình dBFS</div>
+                <div className="font-mono font-bold text-lg text-foreground">{typeof aiAnalysis.loudnessAvgDbfs === 'number' ? aiAnalysis.loudnessAvgDbfs.toFixed(1) : aiAnalysis.loudnessAvgDbfs}</div>
+              </div>
+            )}
+            {aiAnalysis.loudnessDynamicContrast !== undefined && (
+              <div className="bg-surface p-3 rounded-xl border border-cyan-100 dark:border-cyan-800 text-center">
+                <div className="text-xs text-text-muted mb-1">Độ biến thiên</div>
+                <div className="font-mono font-bold text-lg text-foreground">{typeof aiAnalysis.loudnessDynamicContrast === 'number' ? aiAnalysis.loudnessDynamicContrast.toFixed(2) : aiAnalysis.loudnessDynamicContrast}</div>
+              </div>
+            )}
+            {aiAnalysis.loudnessOptimalPercent !== undefined && (
+              <div className="bg-surface p-3 rounded-xl border border-cyan-100 dark:border-cyan-800 text-center">
+                <div className="text-xs text-text-muted mb-1">Vùng tối ưu</div>
+                <div className="font-mono font-bold text-lg text-emerald-600 dark:text-emerald-400">{typeof aiAnalysis.loudnessOptimalPercent === 'number' ? aiAnalysis.loudnessOptimalPercent.toFixed(0) : aiAnalysis.loudnessOptimalPercent}%</div>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-text-secondary leading-relaxed bg-surface p-3 rounded-xl border border-cyan-100 dark:border-cyan-800">
+            {aiAnalysis.loudnessFeedback}
+          </p>
+        </Card>
+      )}
+
+      {/* AI Micro-Drills — Bài tập vi mô 30 giây khắc phục lỗi */}
+      {aiAnalysis && aiAnalysis.microDrills && aiAnalysis.microDrills.length > 0 && (
+        <Card className="p-6 bg-orange-50/60 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800">
+          <h3 className="font-heading font-bold text-foreground text-lg flex items-center gap-2 mb-4">
+            <Target className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            <span>Bài Tập Vi Mô AI (Micro-Drills 30s)</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {aiAnalysis.microDrills.map((drill: any, i: number) => (
+              <div key={i} className="bg-surface p-4 rounded-xl border border-orange-100 dark:border-orange-800 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/50 px-2 py-0.5 rounded-full">#{i + 1}</span>
+                  <span className="text-sm font-semibold text-foreground">{drill.title}</span>
+                </div>
+                <div className="text-[11px] text-text-muted">
+                  Mục tiêu: <span className="text-orange-600 dark:text-orange-400 font-medium">{drill.targetWeakness}</span>
+                </div>
+                <p className="text-xs text-text-secondary leading-relaxed">{drill.instructions}</p>
+                {drill.technique && (
+                  <div className="text-[11px] text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/30 px-2 py-1 rounded-md">
+                    Kỹ thuật: {drill.technique}
+                  </div>
+                )}
+                <div className="flex items-center gap-1 text-[11px] text-text-muted">
+                  <Timer className="w-3 h-3" />
+                  <span>{drill.durationSeconds || 30}s</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Key Recommendations */}
       <Card className="p-6 bg-violet-50/60 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800">
         <h4 className="font-heading font-bold text-primary text-base flex items-center gap-2 mb-3">
           <Sparkles className="w-5 h-5 text-primary" />
-          <span>Kế Hoạch Cải Thiện & Bài Tập Vi Mô (Micro-Drills)</span>
+          <span>Kế Hoạch Cải Thiện</span>
         </h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {report.keyRecommendations.map((rec, i) => (
