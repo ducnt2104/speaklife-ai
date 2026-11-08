@@ -3,11 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { SkeletonCard } from "@/components/ui/Skeleton";
+import { Card, Badge, Button, EmptyState, SkeletonCard } from "@/components/ui";
 import { useAuth } from "@/lib/auth/AuthContext";
 import {
   BookOpen,
