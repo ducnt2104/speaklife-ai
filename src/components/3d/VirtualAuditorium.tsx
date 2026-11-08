@@ -47,39 +47,80 @@ export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = React.memo(({
       container.appendChild(renderer.domElement);
 
       // 2. Realistic Stadium Lighting
-      const ambientLight = new THREE.AmbientLight(0x384152, 0.7);
+      const ambientLight = new THREE.AmbientLight(0x1e293b, 0.8); // Deep midnight base
       scene.add(ambientLight);
 
-      // Main Center Presentation Spotlight
-      const centerSpot = new THREE.SpotLight(0x8b5cf6, 3.2); // Violet glow
-      centerSpot.position.set(0, 7.5, 2.5);
-      centerSpot.angle = Math.PI / 4.2;
-      centerSpot.penumbra = 0.6;
+      // Main Center Presentation Spotlight (Dramatic Focus on Speaker)
+      const centerSpot = new THREE.SpotLight(0xa78bfa, 4.5); // Radiant violet/cyan glow
+      centerSpot.position.set(0, 8.5, 2.8);
+      centerSpot.angle = Math.PI / 4.0;
+      centerSpot.penumbra = 0.55;
       centerSpot.castShadow = true;
+      centerSpot.shadow.bias = -0.0005;
       scene.add(centerSpot);
 
+      // Uplight Rim Lights (Electric Cyan & Neon Violet from Stage Apron)
+      const uplightCyan = new THREE.PointLight(0x06b6d4, 2.2, 10);
+      uplightCyan.position.set(-3.5, 0.2, 3.2);
+      scene.add(uplightCyan);
+
+      const uplightViolet = new THREE.PointLight(0x8b5cf6, 2.2, 10);
+      uplightViolet.position.set(3.5, 0.2, 3.2);
+      scene.add(uplightViolet);
+
       // Warm Key Lights (Left & Right Floodlights)
-      const leftFlood = new THREE.DirectionalLight(0x38bdf8, 1.0); // Cyan rim light
-      leftFlood.position.set(-6, 6, 2);
+      const leftFlood = new THREE.DirectionalLight(0x38bdf8, 1.2); // Cyan rim light
+      leftFlood.position.set(-7, 7, 3);
       scene.add(leftFlood);
 
       const rightFlood = new THREE.DirectionalLight(0xf59e0b, 0.9); // Amber stage warmth
-      rightFlood.position.set(6, 6, 2);
+      rightFlood.position.set(7, 7, 3);
       scene.add(rightFlood);
 
       // Volumetric Spotlight Cones (Visual stage light beams)
-      const coneGeo = new THREE.ConeGeometry(2.5, 7.0, 32, 1, true);
+      const coneGeo = new THREE.ConeGeometry(2.8, 8.0, 32, 1, true);
       const coneMat = new THREE.MeshBasicMaterial({
         color: 0x8b5cf6,
         transparent: true,
-        opacity: 0.07,
+        opacity: 0.08,
         side: THREE.DoubleSide,
         depthWrite: false,
+        blending: THREE.AdditiveBlending,
       });
       const lightBeam = new THREE.Mesh(coneGeo, coneMat);
-      lightBeam.position.set(0, 4.0, 2.0);
+      lightBeam.position.set(0, 4.5, 2.2);
       lightBeam.rotation.x = Math.PI;
       scene.add(lightBeam);
+
+      // 2.1 Floating Dust Particles (Cinematic floating mote atmosphere)
+      const particleCount = 180;
+      const particlePositions = new Float32Array(particleCount * 3);
+      const particleVelocities: { x: number; y: number; z: number }[] = [];
+
+      for (let p = 0; p < particleCount; p++) {
+        particlePositions[p * 3] = (Math.random() - 0.5) * 7;
+        particlePositions[p * 3 + 1] = Math.random() * 5.5 + 0.5;
+        particlePositions[p * 3 + 2] = Math.random() * 5 + 0.5;
+        particleVelocities.push({
+          x: (Math.random() - 0.5) * 0.003,
+          y: Math.random() * 0.004 + 0.002,
+          z: (Math.random() - 0.5) * 0.003,
+        });
+      }
+
+      const particleGeo = new THREE.BufferGeometry();
+      particleGeo.setAttribute("position", new THREE.BufferAttribute(particlePositions, 3));
+
+      const particleMat = new THREE.PointsMaterial({
+        color: 0x67e8f9,
+        size: 0.05,
+        transparent: true,
+        opacity: 0.65,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const dustParticles = new THREE.Points(particleGeo, particleMat);
+      scene.add(dustParticles);
 
       // 3. Stage Floor (Presenter's Stage)
       const stageGeo = new THREE.CylinderGeometry(6, 6.2, 0.5, 32);
@@ -303,6 +344,24 @@ export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = React.memo(({
             if (spectator.rightArm) spectator.rightArm.rotation.x = 0;
           }
         });
+
+        // Animate Floating Dust Particles (Gentle cinematic drift)
+        const posAttr = particleGeo.attributes.position as THREE.BufferAttribute;
+        const positions = posAttr.array as Float32Array;
+        for (let p = 0; p < particleCount; p++) {
+          positions[p * 3] += particleVelocities[p].x;
+          positions[p * 3 + 1] += particleVelocities[p].y;
+          positions[p * 3 + 2] += particleVelocities[p].z;
+
+          // Wrap around bounding box
+          if (positions[p * 3 + 1] > 6.0) positions[p * 3 + 1] = 0.5;
+          if (positions[p * 3] > 3.5) positions[p * 3] = -3.5;
+          if (positions[p * 3] < -3.5) positions[p * 3] = 3.5;
+        }
+        posAttr.needsUpdate = true;
+
+        // Subtle spotlight breathing intensity
+        centerSpot.intensity = 4.2 + Math.sin(elapsedTime * 1.5) * 0.3;
 
         renderer?.render(scene, camera);
       };

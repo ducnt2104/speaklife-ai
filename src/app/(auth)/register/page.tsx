@@ -3,9 +3,10 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mic2, UserPlus, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { UserPlus, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button, Card } from "@/components/ui";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { Logo } from "@/components/brand/Logo";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -51,10 +52,8 @@ export default function RegisterPage() {
     <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md p-8 bg-surface border-border shadow-lg">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-white mx-auto mb-4 shadow-md">
-            <Mic2 className="w-7 h-7" />
-          </div>
+        <div className="text-center mb-8 flex flex-col items-center">
+          <Logo variant="icon" size="lg" animated className="mb-4" />
           <h1 className="text-2xl font-extrabold text-foreground">Tạo tài khoản SpeakLife AI</h1>
           <p className="text-sm text-text-secondary mt-1">
             Lưu lịch sử, theo dõi tiến bộ và cá nhân hóa trải nghiệm

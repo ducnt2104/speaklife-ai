@@ -60,6 +60,31 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
         role="img"
         aria-label="Biểu đồ Radar 5 trục Năng lực Thuyết trình Đa chiều MPRE"
       >
+        <defs>
+          {/* Neon Glow Filter */}
+          <filter id="radar-neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+
+          {/* Radar Fill Gradient */}
+          <radialGradient id="radar-fill-grad" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#06B6D4" stopOpacity="0.45" />
+            <stop offset="60%" stopColor="#8B5CF6" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#10B981" stopOpacity="0.1" />
+          </radialGradient>
+
+          {/* Radar Stroke Linear Gradient */}
+          <linearGradient id="radar-stroke-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#06B6D4" />
+            <stop offset="50%" stopColor="#3B82F6" />
+            <stop offset="100%" stopColor="#10B981" />
+          </linearGradient>
+        </defs>
+
         {/* Background Grid Rings */}
         {rings.map((ringRatio, rIdx) => {
           const rPoints = axes.map((_, i) => {
@@ -73,8 +98,9 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
             <polygon
               key={rIdx}
               points={rPoints}
-              fill="none"
-              stroke="#E2E8F0"
+              fill={rIdx === rings.length - 1 ? "rgba(15, 23, 42, 0.03)" : "none"}
+              stroke="currentColor"
+              className="text-slate-200 dark:text-slate-800"
               strokeWidth={ringRatio === 0.75 ? "1.5" : "1"}
               strokeDasharray={ringRatio === 0.75 ? "3,3" : undefined}
             />
@@ -93,7 +119,8 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
               y1={center}
               x2={x}
               y2={y}
-              stroke="#CBD5E1"
+              stroke="currentColor"
+              className="text-slate-200 dark:text-slate-800"
               strokeWidth="1"
             />
           );
@@ -106,14 +133,16 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
           stroke="#10B981"
           strokeWidth="1.5"
           strokeDasharray="4,4"
+          opacity="0.8"
         />
 
-        {/* User Score Polygon (Violet filled) */}
+        {/* User Score Polygon (Neon Glow filled) */}
         <polygon
           points={scorePoints}
-          fill="rgba(124, 58, 237, 0.25)"
-          stroke="#7C3AED"
+          fill="url(#radar-fill-grad)"
+          stroke="url(#radar-stroke-grad)"
           strokeWidth="2.5"
+          filter="url(#radar-neon-glow)"
         />
 
         {/* Score Vertex Dots */}
@@ -123,15 +152,24 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
           const x = center + Math.cos(angle) * (radius * ratio);
           const y = center + Math.sin(angle) * (radius * ratio);
           return (
-            <circle
-              key={i}
-              cx={x}
-              cy={y}
-              r="4.5"
-              fill="#FFFFFF"
-              stroke="#7C3AED"
-              strokeWidth="2.5"
-            />
+            <g key={i}>
+              <circle
+                cx={x}
+                cy={y}
+                r="6"
+                fill="#06B6D4"
+                opacity="0.3"
+                className="animate-ping"
+              />
+              <circle
+                cx={x}
+                cy={y}
+                r="4"
+                fill="#FFFFFF"
+                stroke="#06B6D4"
+                strokeWidth="2.5"
+              />
+            </g>
           );
         })}
 
@@ -149,10 +187,10 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
               x={x}
               y={y + (isTopOrBottom ? (y < center ? -2 : 6) : 3)}
               textAnchor="middle"
-              className="text-[11px] font-heading font-medium fill-slate-700 select-none"
+              className="text-[11px] font-heading font-medium fill-foreground select-none"
             >
               {axis.label}
-              <tspan className="font-mono font-bold fill-primary" dx="4">
+              <tspan className="font-mono font-bold fill-cyan-500 dark:fill-cyan-400" dx="4">
                 ({axis.data.score}/{axis.data.maxPoints})
               </tspan>
             </text>

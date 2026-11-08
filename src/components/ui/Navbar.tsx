@@ -3,8 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Mic2, ShieldCheck, BarChart3, Settings, PlayCircle, LogIn, LogOut, Menu, X, User, History } from "lucide-react";
+import { ShieldCheck, BarChart3, Settings, PlayCircle, LogIn, LogOut, Menu, X, User, History } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { Logo } from "@/components/brand/Logo";
 
 export const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -28,19 +29,8 @@ export const Navbar: React.FC = () => {
     <header className="sticky top-0 z-40 w-full border-b border-border bg-surface/90 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-3 group" onClick={() => setMobileMenuOpen(false)}>
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-sm group-hover:bg-primary-hover transition-colors">
-            <Mic2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="font-heading font-bold text-lg text-foreground tracking-tight flex items-center gap-1.5">
-              SpeakLife <span className="text-primary font-bold">AI</span>
-              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-primary-light text-primary font-semibold hidden sm:inline">
-                Đồng Nai 2026
-              </span>
-            </span>
-            <p className="text-[11px] text-text-muted hidden sm:block">Phòng luyện phản xạ giao tiếp & thuyết trình</p>
-          </div>
+        <Link href="/" className="group" onClick={() => setMobileMenuOpen(false)}>
+          <Logo variant="full" size="md" animated showBadge />
         </Link>
 
         {/* Desktop Navigation */}

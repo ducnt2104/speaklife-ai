@@ -18,24 +18,24 @@ export default function HomePage() {
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground tracking-tight leading-[1.15]">
               Phòng Luyện Phản Xạ <br />
-              <span className="text-primary bg-clip-text">Giao Tiếp & Thuyết Trình</span> Thực Chiến
+              <span className="text-gradient-brand">Giao Tiếp & Thuyết Trình</span> Thực Chiến
             </h1>
 
             <p className="text-base sm:text-lg text-text-secondary leading-relaxed max-w-2xl mx-auto">
               Giải pháp AI Đa phương thức đầu tiên kết hợp <strong>Thị giác xử lý biên (Zero-Data Edge AI)</strong>,
-              <strong>Khán phòng 3D tương tác</strong> và <strong>Giám khảo AI chất vấn phản biện</strong> — giúp học sinh vượt qua hội chứng sợ đám đông và làm chủ sân khấu.
+              <strong> Khán phòng 3D tương tác</strong> và <strong>Giám khảo AI chất vấn phản biện</strong> — giúp học sinh vượt qua hội chứng sợ đám đông và làm chủ sân khấu.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
               <Link href="/setup">
-                <Button variant="primary" size="lg" className="w-full sm:w-auto shadow-md">
-                  <Play className="w-4 h-4 fill-current mr-1" />
+                <Button variant="primary" size="lg" className="w-full sm:w-auto btn-shimmer shadow-xl shadow-cyan-500/25 text-base px-8 py-3.5">
+                  <Play className="w-4 h-4 fill-current mr-2" />
                   <span>Bắt đầu luyện tập ngay</span>
                 </Button>
               </Link>
               <Link href="/privacy">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600 mr-1" />
+                <Button variant="outline" size="lg" className="w-full sm:w-auto glass-card">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 mr-2" />
                   <span>Cam kết Zero-Data Retention</span>
                 </Button>
               </Link>

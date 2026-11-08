@@ -28,9 +28,46 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "SpeakLife AI — Phòng luyện phản xạ giao tiếp và thuyết trình thực chiến",
-  description: "Web-App tích hợp Trí tuệ nhân tạo Đa phương thức kết hợp Thị giác xử lý biên (Privacy-Preserving Edge AI) dành cho học sinh Việt Nam. Sản phẩm dự thi Gameshow 'Đấu trường AI' TP. Đồng Nai năm 2026.",
-  keywords: ["SpeakLife AI", "Luyện thuyết trình", "Phản biện AI", "MediaPipe Edge AI", "Zero-Data Retention", "Đấu trường AI Đồng Nai"],
+  description: "Nền tảng AI đa phương thức kết hợp Thị giác xử lý biên (Privacy-Preserving Edge AI) và Ban Giám khảo Phản biện Đa chiều dành cho học sinh Việt Nam. Sản phẩm dự thi Gameshow 'Đấu trường AI' TP. Đồng Nai năm 2026.",
+  keywords: ["SpeakLife AI", "Luyện thuyết trình", "Phản biện AI", "MediaPipe Edge AI", "Zero-Data Retention", "Đấu trường AI Đồng Nai", "MPRE Rubric"],
   authors: [{ name: "Nguyễn Tiến Đức & Đội thi SpeakLife AI - THPT Tôn Đức Thắng" }],
+  metadataBase: new URL(process.env.APP_URL || "https://speaklife-ai.com"),
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [
+      { url: "/icon.svg", sizes: "180x180", type: "image/svg+xml" },
+    ],
+  },
+  manifest: "/site.webmanifest",
+  themeColor: "#090D16",
+  openGraph: {
+    type: "website",
+    locale: "vi_VN",
+    url: "/",
+    siteName: "SpeakLife AI",
+    title: "SpeakLife AI — Phòng Luyện Phản Xạ Thuyết Trình Thực Chiến",
+    description: "Đánh giá 5 chiều MPRE với Thị giác biên MediaPipe, Đo lường Âm lượng Decibel & 3 Persona Giám khảo Phản biện Đấu trường AI Đồng Nai 2026.",
+    images: [
+      {
+        url: "/brand/logo.svg",
+        width: 1200,
+        height: 630,
+        alt: "SpeakLife AI — Phòng Luyện Thuyết Trình",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SpeakLife AI — Luyện Phản Xạ Thuyết Trình Đỉnh Cao",
+    description: "Nền tảng luyện phản biện AI và thị giác máy tính bảo mật Zero-Data Retention.",
+    images: ["/brand/logo.svg"],
+  },
 };
 
 export default function RootLayout({

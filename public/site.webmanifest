@@ -1,0 +1,22 @@
+{
+  "name": "SpeakLife AI — Phòng Luyện Phản Xạ Thuyết Trình",
+  "short_name": "SpeakLife AI",
+  "description": "Nền tảng luyện phản xạ giao tiếp và thuyết trình thực chiến với AI giám khảo đa giác quan và buồng luyện thị giác MediaPipe.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090D16",
+  "theme_color": "#090D16",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/brand/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

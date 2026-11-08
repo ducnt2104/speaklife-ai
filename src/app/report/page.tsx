@@ -7,6 +7,7 @@ import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLef
 import { Button, Card, Badge, MathText } from "@/components/ui";
 import { MPRERadarChart } from "@/components/charts/MPRERadarChart";
 import { MPREEvaluationResult } from "@/lib/rubric/mpre-calculator";
+import { BrandLoader } from "@/components/brand/BrandLoader";
 
 function ReportContent() {
   const searchParams = useSearchParams();
@@ -14,6 +15,26 @@ function ReportContent() {
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [fillerInstances, setFillerInstances] = useState<Array<{ word: string; timestampSec: number; contextSnippet: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [displayScore, setDisplayScore] = useState(0);
+
+  // Smooth Count-Up Animation (0 -> TotalScore in 1.5s with easeOutExpo)
+  useEffect(() => {
+    if (!report) return;
+    const target = report.totalScore;
+    const durationMs = 1500;
+    const startTime = performance.now();
+
+    const updateFrame = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(1, elapsed / durationMs);
+      const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      setDisplayScore(Math.round(ease * target));
+      if (progress < 1) {
+        requestAnimationFrame(updateFrame);
+      }
+    };
+    requestAnimationFrame(updateFrame);
+  }, [report]);
 
   useEffect(() => {
     const reportId = searchParams.get("id");
@@ -62,9 +83,8 @@ function ReportContent() {
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-        <p className="text-sm text-text-secondary mt-4">Đang tải báo cáo...</p>
+      <div className="max-w-2xl mx-auto px-4 py-20 flex justify-center">
+        <BrandLoader label="Đang tải và tổng hợp chẩn đoán 5 chiều MPRE..." size="lg" />
       </div>
     );
   }
@@ -118,7 +138,7 @@ function ReportContent() {
             <span>Xuất PDF Báo cáo</span>
           </Button>
           <Link href="/setup" className="print:hidden">
-            <Button variant="primary" size="sm">
+            <Button variant="primary" size="sm" className="btn-shimmer shadow-lg shadow-cyan-500/20">
               <RotateCcw className="w-4 h-4 mr-1.5" />
               <span>Luyện lại bài mới</span>
             </Button>
@@ -129,17 +149,23 @@ function ReportContent() {
       {/* Hero Score Grid: Radar Chart + Total Score Badge */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
         {/* Total Score & Tier (5 Cols) */}
-        <Card className="lg:col-span-5 p-8 bg-gradient-to-br from-surface to-violet-50/40 dark:to-violet-950/20 border-border flex flex-col justify-between">
-          <div>
+        <Card className="lg:col-span-5 p-8 glass-panel border border-white/10 flex flex-col justify-between shadow-2xl relative overflow-hidden">
+          {/* Subtle Ambient Backlight */}
+          <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-12 -left-12 w-48 h-48 rounded-full bg-violet-500/15 blur-3xl pointer-events-none" />
+
+          <div className="relative z-10">
             <div className="flex items-center justify-between">
               <span className="text-xs uppercase font-bold tracking-wider text-text-muted">Tổng Điểm MPRE</span>
-              <Badge variant={report.totalScore >= 80 ? "success" : "warning"} className="text-xs px-3 py-1">
+              <Badge variant={report.totalScore >= 80 ? "success" : "warning"} className="text-xs px-3 py-1 font-semibold">
                 Hạng: {report.tier}
               </Badge>
             </div>
 
             <div className="mt-6 flex items-baseline gap-2">
-              <span className="text-6xl font-extrabold font-mono text-primary">{report.totalScore}</span>
+              <span className="text-6xl font-extrabold font-mono text-gradient-brand">
+                {displayScore}
+              </span>
               <span className="text-2xl font-mono text-text-muted">/100</span>
             </div>
 
@@ -148,29 +174,94 @@ function ReportContent() {
             </p>
           </div>
 
-          <div className="mt-8 pt-6 border-t border-border grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="mt-8 pt-6 border-t border-border/60 grid grid-cols-3 gap-2 text-center text-xs relative z-10">
             <div>
-              <div className="font-mono font-bold text-base text-foreground">{report.metricsSummary.eyeContactRatio}%</div>
+              <div className="font-mono font-bold text-base text-emerald-500 dark:text-emerald-400">{report.metricsSummary.eyeContactRatio}%</div>
               <div className="text-[11px] text-text-muted mt-0.5">Eye Contact</div>
             </div>
             <div>
-              <div className="font-mono font-bold text-base text-foreground">{report.metricsSummary.wpm}</div>
+              <div className="font-mono font-bold text-base text-cyan-500 dark:text-cyan-400">{report.metricsSummary.wpm}</div>
               <div className="text-[11px] text-text-muted mt-0.5">Tốc độ (WPM)</div>
             </div>
             <div>
-              <div className="font-mono font-bold text-base text-foreground">{report.metricsSummary.avgReactionSeconds}s</div>
+              <div className="font-mono font-bold text-base text-violet-500 dark:text-violet-400">{report.metricsSummary.avgReactionSeconds}s</div>
               <div className="text-[11px] text-text-muted mt-0.5">Phản xạ phản biện</div>
             </div>
           </div>
         </Card>
 
         {/* 5-Axis Radar Chart (7 Cols) */}
-        <Card className="lg:col-span-7 p-6 bg-surface flex flex-col items-center">
-          <h3 className="font-heading font-semibold text-foreground text-sm self-start mb-2">
-            Biểu Đồ Radar Năng Lực 5 Chiều
+        <Card className="lg:col-span-7 p-6 glass-panel border border-white/10 flex flex-col items-center shadow-2xl">
+          <h3 className="font-heading font-semibold text-foreground text-sm self-start mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+            <span>Biểu Đồ Radar Năng Lực 5 Chiều MPRE</span>
           </h3>
           <MPRERadarChart dimensions={report.dimensions} className="w-full" />
         </Card>
+      </div>
+
+      {/* Achievement Badges Row */}
+      <div className="space-y-3">
+        <h3 className="font-heading font-bold text-foreground text-base flex items-center gap-2">
+          <Award className="w-5 h-5 text-amber-500" />
+          <span>Huy Hiệu & Thành Tích Đạt Được</span>
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          {[
+            {
+              title: "Bậc thầy Ánh mắt",
+              desc: `Duy trì ${report.metricsSummary.eyeContactRatio}% giao tiếp mắt`,
+              unlocked: report.metricsSummary.eyeContactRatio >= 70,
+              icon: "👁️",
+            },
+            {
+              title: "Tiết tấu Hoàng gia",
+              desc: `Nhịp nói ${report.metricsSummary.wpm} WPM`,
+              unlocked: report.metricsSummary.wpm >= 110 && report.metricsSummary.wpm <= 150,
+              icon: "🎵",
+            },
+            {
+              title: "Bản lĩnh Vấn đáp",
+              desc: `Phản xạ đối đáp ${report.metricsSummary.avgReactionSeconds}s`,
+              unlocked: report.metricsSummary.avgReactionSeconds <= 4.5 && report.metricsSummary.avgReactionSeconds > 0,
+              icon: "⚡",
+            },
+            {
+              title: "Kiểm soát Ngôn từ",
+              desc: `Mật độ ${report.metricsSummary.fillerWordRatePerMinute} từ đệm/phút`,
+              unlocked: report.metricsSummary.fillerWordRatePerMinute <= 1.5,
+              icon: "🎯",
+            },
+            {
+              title: "Lập luận Thép",
+              desc: `Nội dung ${report.dimensions.contentLogic.score}/${report.dimensions.contentLogic.maxPoints}đ`,
+              unlocked: report.dimensions.contentLogic.score >= 15,
+              icon: "🛡️",
+            },
+          ].map((badge, idx) => (
+            <div
+              key={idx}
+              className={`p-3 rounded-xl border flex flex-col items-center text-center transition-all ${
+                badge.unlocked
+                  ? "bg-gradient-to-b from-amber-500/10 to-amber-500/5 border-amber-400/40 shadow-sm"
+                  : "bg-surface-subtle/50 border-border opacity-50 grayscale"
+              }`}
+            >
+              <span className="text-2xl mb-1">{badge.icon}</span>
+              <span className={`text-xs font-bold leading-tight ${badge.unlocked ? "text-foreground" : "text-text-muted"}`}>
+                {badge.title}
+              </span>
+              <span className="text-[10px] text-text-muted mt-1 leading-snug">
+                {badge.desc}
+              </span>
+              {badge.unlocked && (
+                <span className="mt-1.5 text-[9px] font-mono font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                  ★ Đạt chuẩn
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Detailed Rubric Dimension Cards */}
@@ -391,9 +482,8 @@ function ReportContent() {
 export default function ReportPage() {
   return (
     <Suspense fallback={
-      <div className="max-w-2xl mx-auto px-4 py-20 text-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-        <p className="text-sm text-text-secondary mt-4">Đang tải báo cáo...</p>
+      <div className="max-w-2xl mx-auto px-4 py-20 flex justify-center">
+        <BrandLoader label="Đang khởi tạo buồng chẩn đoán MPRE..." size="lg" />
       </div>
     }>
       <ReportContent />

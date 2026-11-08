@@ -301,8 +301,27 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
     return () => clearInterval(interval);
   }, [isPracticing, eyeContactRatio, externalWpm, dbLevel, gazeStatus, onMetricsUpdate]);
 
+  // Calculate dynamic border glow based on eye contact and face presence
+  const statusColor =
+    gazeStatus === "centered" && eyeContactRatio >= 65
+      ? "text-emerald-400 border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.35)]"
+      : gazeStatus === "distracted"
+      ? "text-amber-400 border-amber-500 shadow-[0_0_30px_rgba(245,158,11,0.35)]"
+      : "text-rose-400 border-rose-500/80 shadow-[0_0_25px_rgba(239,68,68,0.3)]";
+
+  // Equalizer amplitude calculation
+  const normalizedDb = Math.min(100, Math.max(0, (dbLevel + 60) * 2.2)); // map -60..-15 dB to 0..100%
+
   return (
-    <div className={`relative rounded-2xl overflow-hidden bg-slate-900 border border-border shadow-lg ${className}`}>
+    <div
+      className={`relative rounded-2xl overflow-hidden bg-slate-950 border-2 transition-all duration-500 ${statusColor} ${className}`}
+    >
+      {/* Sci-Fi HUD Reticle Brackets (4 Corners) */}
+      <div className="hud-corner-tl" />
+      <div className="hud-corner-tr" />
+      <div className="hud-corner-bl" />
+      <div className="hud-corner-br" />
+
       {/* Video Stream Element */}
       <video
         ref={videoRef}
@@ -319,22 +338,43 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
         <div
           className={`w-28 h-28 rounded-full border-2 transition-all duration-300 flex items-center justify-center ${
             gazeStatus === "centered"
-              ? "border-emerald-400 bg-emerald-500/15 shadow-[0_0_25px_rgba(16,185,129,0.5)] scale-105"
+              ? "border-emerald-400 bg-emerald-500/15 shadow-[0_0_30px_rgba(16,185,129,0.6)] scale-105"
               : gazeStatus === "distracted"
-              ? "border-amber-400/80 bg-amber-500/10 shadow-[0_0_20px_rgba(245,158,11,0.4)]"
-              : "border-slate-600/40 bg-slate-800/10"
+              ? "border-amber-400/80 bg-amber-500/10 shadow-[0_0_25px_rgba(245,158,11,0.5)]"
+              : "border-rose-500/60 bg-rose-500/10 shadow-[0_0_20px_rgba(239,68,68,0.35)]"
           }`}
         >
+          {/* Outer Crosshair Ticks */}
+          <div className="absolute w-full h-[1px] bg-current opacity-30" />
+          <div className="absolute h-full w-[1px] bg-current opacity-30" />
+
           <div
-            className={`w-3 h-3 rounded-full transition-colors ${
+            className={`w-3.5 h-3.5 rounded-full transition-colors ${
               gazeStatus === "centered"
                 ? "bg-emerald-400 animate-ping"
                 : gazeStatus === "distracted"
                 ? "bg-amber-400"
-                : "bg-slate-500"
+                : "bg-rose-400"
             }`}
           />
         </div>
+      </div>
+
+      {/* Audio Visualizer Equalizer Waves (Across Video Bottom) */}
+      <div className="absolute bottom-16 inset-x-4 h-6 flex items-end justify-center gap-1 pointer-events-none z-10 opacity-80">
+        {[0.4, 0.7, 0.9, 1.2, 0.8, 1.4, 1.1, 0.6, 0.9, 1.3, 0.7, 1.1, 0.8, 1.2, 0.5, 0.9].map((mult, idx) => {
+          const heightPct = dbLevel > -55 ? Math.min(100, Math.max(12, normalizedDb * mult * (0.6 + Math.sin(idx + Date.now() / 300) * 0.3))) : 8;
+          return (
+            <div
+              key={idx}
+              className="w-1.5 rounded-full bg-gradient-to-t from-cyan-500 via-blue-500 to-emerald-400 transition-all duration-75"
+              style={{
+                height: `${heightPct}%`,
+                opacity: dbLevel > -55 ? 0.9 : 0.25,
+              }}
+            />
+          );
+        })}
       </div>
 
       {/* Top Controls Bar */}
@@ -373,7 +413,7 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
       </div>
 
       {/* Real-time HUD Metrics Bar (Bottom) */}
-      <div className="absolute bottom-3 inset-x-3 z-10 grid grid-cols-3 gap-2 bg-slate-950/85 backdrop-blur-md p-2.5 rounded-xl border border-slate-700/60 text-white">
+      <div className="absolute bottom-3 inset-x-3 z-10 grid grid-cols-3 gap-2 glass-panel p-2.5 rounded-xl border border-white/10 text-white shadow-2xl">
         {/* Eye Contact Ratio */}
         <div className="flex items-center gap-2">
           <div
