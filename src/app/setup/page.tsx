@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   GraduationCap,
@@ -17,6 +17,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { Button, Card, Badge, MathText } from "@/components/ui";
+import { DocumentDropzone } from "@/components/ui/DocumentDropzone";
 import { PRACTICE_SCENARIOS, DIFFICULTY_TIERS } from "@/lib/constants/scenarios";
 
 export default function SetupPage() {
@@ -31,6 +32,21 @@ export default function SetupPage() {
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  // Spotlight Tour — auto-trigger on first visit
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        const { isTourCompleted, startSetupTour } = await import("@/lib/tour/spotlight-tour");
+        if (!isTourCompleted()) {
+          startSetupTour();
+        }
+      } catch (err) {
+        console.warn("Spotlight tour failed to load:", err);
+      }
+    }, 800); // Small delay to let DOM render data-tour elements
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleTestAiQuestions = async () => {
     if (!outlineContent.trim()) {
@@ -102,7 +118,7 @@ export default function SetupPage() {
 
       <div className="space-y-10">
         {/* Step 1: Scenario Selection */}
-        <div>
+        <div data-tour="scenario-select">
           <label className="block text-sm font-semibold text-foreground mb-3 flex items-center justify-between">
             <span>1. Chọn Bối Cảnh Giả Lập</span>
             <span className="text-xs font-normal text-text-muted">4 kịch bản chuẩn hóa</span>
@@ -139,7 +155,7 @@ export default function SetupPage() {
         </div>
 
         {/* Step 2: Difficulty Tier */}
-        <div>
+        <div data-tour="difficulty-select">
           <label className="block text-sm font-semibold text-foreground mb-3 flex items-center justify-between">
             <span>2. Chọn Mức Độ Khắt Khe Của Giám Khảo</span>
             <span className="text-xs font-normal text-text-muted">Độ khó của câu hỏi phản biện</span>
@@ -189,6 +205,20 @@ export default function SetupPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Document Upload Dropzone */}
+            <div data-tour="document-upload">
+              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                Tải lên tài liệu thuyết trình (tùy chọn)
+              </label>
+              <DocumentDropzone
+                onTextExtracted={(text) => {
+                  if (text) {
+                    setOutlineContent(text);
+                  }
+                }}
+              />
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">
                 Tiêu đề bài thuyết trình / Dự án KHKT
@@ -202,7 +232,7 @@ export default function SetupPage() {
               />
             </div>
 
-            <div>
+            <div data-tour="outline-input">
               <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">
                 Nội dung tóm tắt / Các luận điểm chính
               </label>
@@ -216,7 +246,7 @@ export default function SetupPage() {
             </div>
 
             {/* Test AI Questions Button */}
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between pt-1" data-tour="test-ai-btn">
               <Button
                 type="button"
                 variant="outline"
@@ -272,7 +302,7 @@ export default function SetupPage() {
         </Card>
 
         {/* Action Button */}
-        <div className="flex items-center justify-between pt-4">
+        <div className="flex items-center justify-between pt-4" data-tour="start-btn">
           <p className="text-xs text-text-muted">Nhấn bắt đầu để cấp quyền Camera/Mic và bước vào khán phòng ảo 3D.</p>
           <Button
             variant="primary"

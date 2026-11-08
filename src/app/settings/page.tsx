@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Sliders,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
 import { Button, Card, Badge } from "@/components/ui";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -702,6 +703,39 @@ export default function SettingsPage() {
               </button>
             );
           })}
+        </div>
+      </Card>
+
+      {/* ========================================== */}
+      {/* SPOTLIGHT TOUR RE-TRIGGER                  */}
+      {/* ========================================== */}
+      <Card className="p-6 bg-surface">
+        <div className="flex items-center gap-2 mb-4">
+          <BookOpen className="w-5 h-5 text-primary" />
+          <h2 className="font-heading font-semibold text-foreground">Hướng dẫn sử dụng</h2>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-foreground font-medium">Tour hướng dẫn tương tác (Spotlight)</p>
+            <p className="text-xs text-text-muted mt-0.5">Xem lại các bước hướng dẫn với hiệu ứng làm sáng vùng trọng tâm</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                const { resetTour } = await import("@/lib/tour/spotlight-tour");
+                resetTour();
+                const { useRouter } = await import("next/navigation");
+                window.location.href = "/setup";
+              } catch (err) {
+                console.warn("Tour reset failed:", err);
+              }
+            }}
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+            <span>Xem lại hướng dẫn sử dụng</span>
+          </Button>
         </div>
       </Card>
 

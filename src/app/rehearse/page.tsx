@@ -350,7 +350,7 @@ export default function RehearsePage() {
         eyeContactFrames: Math.round(900 * (eyeContactRatio / 100)),
         shoulderTiltVariance: 4,
         averageRmsDecibels: dbLevel,
-        pitchF0StdDev: 16,
+        pitchF0StdDev: (window as any).__speaklife_pitchVariance ?? 16,
         fillerWordCount: fillerCount,
         aiContentScore,
         rebuttalRounds: updatedRounds,
@@ -486,6 +486,13 @@ export default function RehearsePage() {
               onMetricsUpdate={(m) => {
                 setEyeContactRatio(m.eyeContactRatio);
                 setDbLevel(m.dbLevel);
+                // Store enhanced audio AI metrics if available
+                if (m.pitchVariance !== undefined) {
+                  (window as any).__speaklife_pitchVariance = m.pitchVariance;
+                }
+                if (m.silenceRatio !== undefined) {
+                  (window as any).__speaklife_silenceRatio = m.silenceRatio;
+                }
               }}
               className="w-full"
             />

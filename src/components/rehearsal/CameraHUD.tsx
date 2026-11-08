@@ -12,6 +12,8 @@ export interface CameraHUDProps {
     wpm: number;
     dbLevel: number;
     postureStable: boolean;
+    pitchVariance?: number;
+    silenceRatio?: number;
   }) => void;
   className?: string;
   onPermissionDenied?: () => void;
@@ -28,6 +30,7 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const analyzerRef = useRef<FastGazeAnalyzer | null>(null);
+  const localAudioRef = useRef<any>(null);
 
   // Hardware and Permission State
   const [hasVideoPermission, setHasVideoPermission] = useState<boolean | null>(null);
@@ -134,6 +137,16 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
           requestAnimationFrame(checkAudio);
         };
         checkAudio();
+
+        // Start Local Audio AI (Meyda-based feature extraction)
+        try {
+          const { LocalAudioAnalyzer } = await import("@/lib/audio/local-audio-ai");
+          const analyzer = new LocalAudioAnalyzer();
+          await analyzer.start(audioStream);
+          localAudioRef.current = analyzer;
+        } catch (meydaErr) {
+          console.warn("Local Audio AI (Meyda) failed to initialize, using fallback:", meydaErr);
+        }
       } catch (audioErr) {
         console.warn("Microphone stream request failed:", audioErr);
         if (isMounted) {
@@ -152,6 +165,10 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
       }
       if (audioContextRef.current && audioContextRef.current.state !== "closed") {
         audioContextRef.current.close().catch(() => {});
+      }
+      if (localAudioRef.current) {
+        localAudioRef.current.stop();
+        localAudioRef.current = null;
       }
     };
   }, [selectedDeviceId, refreshDevices, onPermissionDenied]);
@@ -197,11 +214,26 @@ export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
   useEffect(() => {
     if (!isPracticing) return;
     const interval = setInterval(() => {
+      // Get enhanced metrics from Local Audio AI if available
+      let pitchVariance: number | undefined;
+      let silenceRatio: number | undefined;
+      if (localAudioRef.current) {
+        try {
+          const audioMetrics = localAudioRef.current.getMetrics();
+          pitchVariance = audioMetrics.pitchVariance;
+          silenceRatio = audioMetrics.silenceRatio;
+        } catch {
+          // Fallback: no enhanced metrics
+        }
+      }
+
       onMetricsUpdate?.({
         eyeContactRatio,
         wpm: externalWpm,
         dbLevel,
         postureStable: gazeStatus !== "distracted",
+        pitchVariance,
+        silenceRatio,
       });
     }, 1000);
     return () => clearInterval(interval);
