@@ -7,6 +7,7 @@ import { z } from "zod";
 import { wrapUntrustedContent, detectPromptInjection } from "@/lib/security/prompt-guard";
 import { truncateSafe } from "@/lib/security/input-sanitizer";
 import { JudgeQuestion } from "@/lib/types";
+import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
 
 // Schema for Gemini Adversarial Questions Output
 export const JudgeQuestionsSchema = z.object({
@@ -32,12 +33,13 @@ export const AnswerEvaluationSchema = z.object({
 });
 
 export class GeminiGateway {
-  private apiKey: string | null;
-  private endpoint: string;
+  private getApiKey(): string | null {
+    return getEffectiveGeminiApiKey();
+  }
 
-  constructor() {
-    this.apiKey = process.env.GEMINI_API_KEY || null;
-    this.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  private getEndpoint(): string {
+    const model = getAIConfig().model || "gemini-3.8-flash";
+    return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   }
 
   /**
@@ -57,8 +59,9 @@ export class GeminiGateway {
 
     const safeOutline = wrapUntrustedContent("presentation_outline", truncateSafe(outlineText, 3000));
 
+    const apiKey = this.getApiKey();
     // If no API key or in offline environment, return pedagogical questions calibrated for THPT
-    if (!this.apiKey) {
+    if (!apiKey) {
       return this.getFallbackQuestions(scenario, difficulty);
     }
 
@@ -87,7 +90,8 @@ Yêu cầu trả về đúng định dạng JSON:
 `.trim();
 
     try {
-      const response = await fetch(`${this.endpoint}?key=${this.apiKey}`, {
+      const endpoint = this.getEndpoint();
+      const response = await fetch(`${endpoint}?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -137,7 +141,8 @@ Yêu cầu trả về đúng định dạng JSON:
     userAnswer: string,
     responseTimeSec: number
   ) {
-    if (!this.apiKey) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
       return this.getFallbackEvaluation(userAnswer, responseTimeSec);
     }
 
@@ -158,7 +163,8 @@ Trả về JSON:
 `.trim();
 
     try {
-      const response = await fetch(`${this.endpoint}?key=${this.apiKey}`, {
+      const endpoint = this.getEndpoint();
+      const response = await fetch(`${endpoint}?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { checkDatabaseHealth } from "@/lib/db";
+import { getAIConfig, getEffectiveGeminiApiKey } from "@/lib/db/ai-config";
 
 export async function GET() {
   const dbHealth = checkDatabaseHealth();
   const memUsage = process.memoryUsage();
+  const aiConfig = getAIConfig();
+  const effectiveKey = getEffectiveGeminiApiKey();
 
   return NextResponse.json({
     status: dbHealth.connected ? "healthy" : "degraded",
@@ -19,12 +22,14 @@ export async function GET() {
         tables: dbHealth.tables,
       },
       ai: {
-        status: process.env.GEMINI_API_KEY ? "configured" : "not_configured",
+        status: aiConfig.last_status || (effectiveKey ? "CONFIGURED" : "NOT_CONFIGURED"),
         provider: "Google Gemini",
-        model: "gemini-2.0-flash",
-        note: process.env.GEMINI_API_KEY
-          ? "API key present, ready for real AI calls"
-          : "No GEMINI_API_KEY — using pedagogical fallback questions",
+        model: aiConfig.model || "gemini-2.0-flash",
+        isConfigured: Boolean(effectiveKey && effectiveKey.length > 0),
+        lastTestedAt: aiConfig.last_tested_at,
+        note: effectiveKey
+          ? "API Key is configured and ready for live AI inference"
+          : "No GEMINI_API_KEY — using pedagogical offline fallback",
       },
       zeroDataRetention: {
         status: "enforced",

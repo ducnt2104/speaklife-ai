@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
+import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
 
 const OutlineRequestSchema = z.object({
   title: z.string().min(1).max(200),
@@ -35,12 +36,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-
+    const apiKey = getEffectiveGeminiApiKey();
+    const model = getAIConfig().model || "gemini-2.0-flash";
     if (apiKey) {
       try {
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },

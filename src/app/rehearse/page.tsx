@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Pause, Square, Award, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
+import { Play, Pause, Square, Award, ShieldCheck, CheckCircle2, ArrowRight, Mic, Volume2 } from "lucide-react";
 import { Button, Card, Badge } from "@/components/ui";
 import { VirtualAuditorium } from "@/components/3d/VirtualAuditorium";
 import { CameraHUD } from "@/components/rehearsal/CameraHUD";
 import { AIJudgePanel } from "@/components/evaluation/AIJudgePanel";
 import { calculateMPREScore } from "@/lib/rubric/mpre-calculator";
 import { PRACTICE_SCENARIOS, DIFFICULTY_TIERS } from "@/lib/constants/scenarios";
+import { SpeechRecognizer } from "@/lib/audio/speech-recognizer";
+import { detectFillerWords } from "@/lib/audio/filler-detector";
+import { CrowdAudioSynthesizer } from "@/lib/audio/crowd-audio";
 
 export default function RehearsePage() {
   const router = useRouter();
@@ -22,11 +25,13 @@ export default function RehearsePage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
-  // Live Metrics — initialize at zero, updated from real sensor data
+  // Live Metrics — updated continuously from sensors & audio recognition
   const [eyeContactRatio, setEyeContactRatio] = useState(0);
   const [wpm, setWpm] = useState(0);
   const [dbLevel, setDbLevel] = useState(-60);
   const [fillerCount, setFillerCount] = useState(0);
+  const [transcript, setTranscript] = useState("");
+  const [wordCount, setWordCount] = useState(0);
   const [audienceReaction, setAudienceReaction] = useState<"neutral" | "attentive" | "distracted" | "applause">("neutral");
 
   // Q&A State
@@ -36,13 +41,15 @@ export default function RehearsePage() {
   const [aiQuestions, setAiQuestions] = useState<string[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
 
+  const recognizerRef = useRef<SpeechRecognizer | null>(null);
+
   const scenario = PRACTICE_SCENARIOS.find((s) => s.id === scenarioId) || PRACTICE_SCENARIOS[1];
   const difficulty = DIFFICULTY_TIERS.find((d) => d.id === difficultyId) || DIFFICULTY_TIERS[1];
 
   // Fallback questions in case AI API is unavailable
   const fallbackQuestions = [
     "Giải pháp của nhóm có thể áp dụng trong điều kiện thực tế phòng học thiếu sáng hay thiết bị yếu không? Hãy giải thích cơ sở kỹ thuật.",
-    "Kết quả thử nghiệm trên 30 học sinh có đủ đại diện để khái quát hóa kết luận không? Nhóm đã xử lý yếu tố sai lệch mẫu như thế nào?"
+    "Kết quả thử nghiệm trên 30 học sinh có đủ đại diện để khái quát hóa kết luận không? Nhóm đã xử lý yếu tố sai lệch mẫu như thế nào?",
   ];
 
   const currentQuestions = aiQuestions.length > 0 ? aiQuestions : fallbackQuestions;
@@ -70,20 +77,63 @@ export default function RehearsePage() {
     return () => clearInterval(timer);
   }, [rehearsalPhase, isPaused]);
 
-  // Dynamic Audience Reaction Engine based on eye contact and speech cadence
+  // Dynamic WPM & Filler Calculation when Word Count or Time changes
   useEffect(() => {
+    if (rehearsalPhase === "presenting" && elapsedSeconds > 2) {
+      const currentWpm = Math.round((wordCount / (elapsedSeconds / 60)));
+      setWpm(currentWpm);
+    }
+  }, [wordCount, elapsedSeconds, rehearsalPhase]);
+
+  // Audio & Speech Recognizer Lifecycle
+  useEffect(() => {
+    if (rehearsalPhase === "presenting" && !isPaused) {
+      if (!recognizerRef.current) {
+        recognizerRef.current = new SpeechRecognizer({
+          lang: "vi-VN",
+          onTranscript: (fullText, interimText, totalWords) => {
+            const combined = (fullText + " " + interimText).trim();
+            setTranscript(combined);
+            setWordCount(totalWords);
+
+            // Detect Vietnamese fillers in real-time
+            const fillerAnalysis = detectFillerWords(combined, elapsedSeconds || 1, "vi");
+            setFillerCount(fillerAnalysis.totalFillers);
+          },
+        });
+      }
+      recognizerRef.current.start();
+    } else {
+      recognizerRef.current?.stop();
+    }
+
+    return () => {
+      recognizerRef.current?.stop();
+    };
+  }, [rehearsalPhase, isPaused, elapsedSeconds]);
+
+  // Dynamic Audience Reaction Engine & Procedural Sound Synthesis
+  useEffect(() => {
+    const crowdAudio = CrowdAudioSynthesizer.getInstance();
+
     if (rehearsalPhase === "presenting") {
-      if (eyeContactRatio >= 75 && wpm >= 120 && wpm <= 145) {
+      if (eyeContactRatio >= 70 && wpm >= 115 && wpm <= 150) {
         setAudienceReaction("attentive");
-      } else if (eyeContactRatio < 50 || wpm < 100 || wpm > 165) {
+        crowdAudio.stopMurmur();
+      } else if (eyeContactRatio < 40 || (elapsedSeconds > 10 && wpm < 80) || wpm > 175) {
         setAudienceReaction("distracted");
+        crowdAudio.startMurmur();
       } else {
         setAudienceReaction("neutral");
+        crowdAudio.stopMurmur();
       }
     } else if (rehearsalPhase === "completed") {
       setAudienceReaction("applause");
+      crowdAudio.playApplause(4.0);
+    } else {
+      crowdAudio.stopMurmur();
     }
-  }, [rehearsalPhase, eyeContactRatio, wpm]);
+  }, [rehearsalPhase, eyeContactRatio, wpm, elapsedSeconds]);
 
   const handleStartSpeaking = () => {
     setRehearsalPhase("presenting");
@@ -98,10 +148,9 @@ export default function RehearsePage() {
 
     // Fetch real questions from AI Judge API
     try {
-      const outlineContent = typeof window !== "undefined" 
-        ? sessionStorage.getItem("speaklife_outline_content") || ""
-        : "";
-      
+      const outlineContent =
+        typeof window !== "undefined" ? sessionStorage.getItem("speaklife_outline_content") || "" : "";
+
       const res = await fetch("/api/judge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,11 +215,15 @@ export default function RehearsePage() {
       // Complete rehearsal and navigate to report
       setRehearsalPhase("completed");
       setAudienceReaction("applause");
+      CrowdAudioSynthesizer.getInstance().playApplause(4.5);
 
       // Compute finalized MPRE diagnostic score
+      const finalDuration = Math.max(30, elapsedSeconds);
+      const finalWords = Math.max(wordCount, Math.round((finalDuration / 60) * (wpm || 120)));
+
       const evaluation = calculateMPREScore({
-        durationSeconds: Math.max(30, elapsedSeconds),
-        totalWords: Math.round((Math.max(30, elapsedSeconds) / 60) * (wpm || 120)),
+        durationSeconds: finalDuration,
+        totalWords: finalWords,
         faceDetectedFrames: 900,
         totalAnalyzedFrames: 900,
         eyeContactFrames: Math.round(900 * (eyeContactRatio / 100)),
@@ -179,11 +232,12 @@ export default function RehearsePage() {
         pitchF0StdDev: 16,
         fillerWordCount: fillerCount,
         aiContentScore: 18,
-        rebuttalRounds: updatedRounds
+        rebuttalRounds: updatedRounds,
       });
 
       sessionStorage.setItem("speaklife_final_report", JSON.stringify(evaluation));
-      
+      sessionStorage.setItem("speaklife_final_transcript", transcript);
+
       // Also save to server if possible
       try {
         await fetch("/api/report/save", {
@@ -191,7 +245,7 @@ export default function RehearsePage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId: `local_${Date.now()}`,
-            durationSeconds: Math.max(30, elapsedSeconds),
+            durationSeconds: finalDuration,
             eyeContactRatio: eyeContactRatio / 100,
             averageWpm: wpm || 120,
             fillerOccurrences: [],
@@ -219,7 +273,9 @@ export default function RehearsePage() {
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-status-danger animate-pulse" />
-            <h2 className="font-heading font-bold text-foreground text-lg">{outlineTitle}</h2>
+            <h2 className="font-heading font-bold text-foreground text-lg">
+              {outlineTitle || "Thuyết trình Đề tài KHKT Quốc Gia"}
+            </h2>
           </div>
           <p className="text-xs text-text-muted mt-0.5">
             Bối cảnh: {scenario.title} • {difficulty.label} ({difficulty.judgeName})
@@ -241,20 +297,11 @@ export default function RehearsePage() {
 
           {rehearsalPhase === "presenting" && (
             <>
-              <Button
-                variant="outline"
-                size="md"
-                onClick={() => setIsPaused(!isPaused)}
-              >
+              <Button variant="outline" size="md" onClick={() => setIsPaused(!isPaused)}>
                 {isPaused ? <Play className="w-4 h-4 fill-current mr-1" /> : <Pause className="w-4 h-4 mr-1" />}
                 <span>{isPaused ? "Tiếp tục" : "Tạm dừng"}</span>
               </Button>
-              <Button
-                variant="danger"
-                size="md"
-                onClick={handleFinishSpeaking}
-                className="shadow-sm"
-              >
+              <Button variant="danger" size="md" onClick={handleFinishSpeaking} className="shadow-sm">
                 <Square className="w-3.5 h-3.5 fill-current mr-1.5" />
                 <span>Kết thúc bài nói</span>
               </Button>
@@ -273,18 +320,20 @@ export default function RehearsePage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column: 3D Virtual Auditorium (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-4">
-          <VirtualAuditorium
-            audienceReaction={audienceReaction}
-            className="w-full aspect-video min-h-[380px]"
-          />
+          <VirtualAuditorium audienceReaction={audienceReaction} className="w-full aspect-video min-h-[380px]" />
 
-          {/* Quick Context Tip */}
-          <div className="bg-surface p-4 rounded-xl border border-border text-xs text-text-secondary flex items-center justify-between">
+          {/* Real-time Subtitles / Telemetry Bar */}
+          <div className="bg-surface p-4 rounded-xl border border-border text-xs text-text-secondary flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Cơ chế Zero-Data: Không có khung hình video nào được lưu trên máy chủ.</span>
+              <Mic className="w-4 h-4 text-primary shrink-0" />
+              <span className="line-clamp-1">
+                {transcript ? `"${transcript.slice(-65)}"` : "Micro đang lắng nghe nhận diện giọng nói tiếng Việt..."}
+              </span>
             </div>
-            <span className="font-mono text-emerald-600 font-semibold">30 FPS WebAssembly</span>
+            <div className="flex items-center gap-3 shrink-0 font-mono text-xs">
+              <span className="text-amber-500 font-semibold">Từ đệm: {fillerCount}</span>
+              <span className="text-emerald-500 font-semibold">Tổng từ: {wordCount}</span>
+            </div>
           </div>
         </div>
 
@@ -293,9 +342,9 @@ export default function RehearsePage() {
           {rehearsalPhase !== "qna" ? (
             <CameraHUD
               isPracticing={rehearsalPhase === "presenting" && !isPaused}
+              externalWpm={wpm}
               onMetricsUpdate={(m) => {
                 setEyeContactRatio(m.eyeContactRatio);
-                setWpm(m.wpm);
                 setDbLevel(m.dbLevel);
               }}
               className="w-full"

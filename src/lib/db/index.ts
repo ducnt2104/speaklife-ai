@@ -132,7 +132,7 @@ const MIGRATIONS = [
       CREATE TABLE IF NOT EXISTS ai_config (
         id INTEGER PRIMARY KEY CHECK(id = 1),
         provider TEXT NOT NULL DEFAULT 'gemini',
-        model TEXT NOT NULL DEFAULT 'gemini-2.0-flash',
+        model TEXT NOT NULL DEFAULT 'gemini-3.8-flash',
         is_enabled INTEGER NOT NULL DEFAULT 1,
         max_requests_per_minute INTEGER NOT NULL DEFAULT 25,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -155,6 +155,14 @@ const MIGRATIONS = [
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
+    `,
+  },
+  {
+    name: "006_add_api_key_to_ai_config",
+    sql: `
+      ALTER TABLE ai_config ADD COLUMN api_key TEXT DEFAULT NULL;
+      ALTER TABLE ai_config ADD COLUMN last_tested_at TEXT DEFAULT NULL;
+      ALTER TABLE ai_config ADD COLUMN last_status TEXT DEFAULT 'CONFIGURED';
     `,
   },
 ];

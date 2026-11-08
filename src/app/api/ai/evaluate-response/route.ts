@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
+import { getEffectiveGeminiApiKey, getAIConfig } from "@/lib/db/ai-config";
 
 const evaluateSchema = z.object({
   question: z.string().min(1, "Thiếu câu hỏi"),
@@ -24,11 +25,12 @@ export async function POST(req: NextRequest) {
     const cleanAnswer = sanitizePromptInput(answer, 2000).sanitizedText;
     const cleanQuestion = sanitizePromptInput(question, 500).sanitizedText;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getEffectiveGeminiApiKey();
+    const model = getAIConfig().model || "gemini-2.0-flash";
     if (apiKey) {
       try {
         const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
