@@ -14,7 +14,7 @@ export interface MPRERadarChartProps {
   className?: string;
 }
 
-export const MPRERadarChart: React.FC<MPRERadarChartProps> = ({
+export const MPRERadarChart: React.FC<MPRERadarChartProps> = React.memo(({
   dimensions,
   className = ""
 }) => {
@@ -173,4 +173,6 @@ export const MPRERadarChart: React.FC<MPRERadarChartProps> = ({
       </div>
     </div>
   );
-};
+});
+
+MPRERadarChart.displayName = "MPRERadarChart";

@@ -9,7 +9,7 @@ export interface VirtualAuditoriumProps {
   onWebGLError?: () => void;
 }
 
-export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = ({
+export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = React.memo(({
   audienceReaction = "neutral",
   className = "",
   onWebGLError,
@@ -309,14 +309,18 @@ export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = ({
 
       animate();
 
-      // 10. Handle Window Resizing
+      // 10. Handle Window Resizing (debounced 150ms)
+      let resizeTimer: ReturnType<typeof setTimeout>;
       const handleResize = () => {
-        if (!container || !renderer) return;
-        const newW = container.clientWidth;
-        const newH = container.clientHeight;
-        camera.aspect = newW / newH;
-        camera.updateProjectionMatrix();
-        renderer.setSize(newW, newH);
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (!container || !renderer) return;
+          const newW = container.clientWidth;
+          const newH = container.clientHeight;
+          camera.aspect = newW / newH;
+          camera.updateProjectionMatrix();
+          renderer.setSize(newW, newH);
+        }, 150);
       };
 
       window.addEventListener("resize", handleResize);
@@ -324,6 +328,7 @@ export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = ({
       // Cleanup
       return () => {
         cancelAnimationFrame(animationFrameId);
+        clearTimeout(resizeTimer);
         window.removeEventListener("resize", handleResize);
 
         scene.traverse((obj) => {
@@ -417,4 +422,6 @@ export const VirtualAuditorium: React.FC<VirtualAuditoriumProps> = ({
       </div>
     </div>
   );
-};
+});
+
+VirtualAuditorium.displayName = "VirtualAuditorium";

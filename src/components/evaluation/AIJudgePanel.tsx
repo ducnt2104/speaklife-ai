@@ -19,7 +19,7 @@ export interface AIJudgePanelProps {
   className?: string;
 }
 
-export const AIJudgePanel: React.FC<AIJudgePanelProps> = ({
+export const AIJudgePanel: React.FC<AIJudgePanelProps> = React.memo(({
   judgeName,
   judgeTitle,
   scenarioTitle,
@@ -254,4 +254,6 @@ export const AIJudgePanel: React.FC<AIJudgePanelProps> = ({
       </div>
     </div>
   );
-};
+});
+
+AIJudgePanel.displayName = "AIJudgePanel";

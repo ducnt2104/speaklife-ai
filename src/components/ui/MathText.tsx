@@ -2,6 +2,8 @@
 
 import React, { useMemo } from "react";
 import { tokenizeScientificText } from "@/lib/render/scientific-renderer";
+// KaTeX CSS — loaded only when MathText is used (removed from globals.css)
+import "katex/dist/katex.min.css";
 
 export interface MathTextProps {
   text: string;
@@ -14,7 +16,7 @@ export interface MathTextProps {
  * Accurately renders mixed Vietnamese text, Markdown, and LaTeX equations ($...$, $$...$$, \(...\), \[...\])
  * Eliminates "$to$" bugs, renders arrows, formulas, chemical equations & fractions cleanly.
  */
-export const MathText: React.FC<MathTextProps> = ({
+export const MathText: React.FC<MathTextProps> = React.memo(({
   text,
   className = "",
   inline = false,
@@ -58,4 +60,6 @@ export const MathText: React.FC<MathTextProps> = ({
       })}
     </Tag>
   );
-};
+});
+
+MathText.displayName = "MathText";

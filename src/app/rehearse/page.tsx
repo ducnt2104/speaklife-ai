@@ -1,17 +1,39 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { Play, Pause, Square, Award, ShieldCheck, CheckCircle2, ArrowRight, Mic, Volume2 } from "lucide-react";
 import { Button, Card, Badge, MathText } from "@/components/ui";
-import { VirtualAuditorium } from "@/components/3d/VirtualAuditorium";
-import { CameraHUD } from "@/components/rehearsal/CameraHUD";
-import { AIJudgePanel } from "@/components/evaluation/AIJudgePanel";
 import { calculateMPREScore } from "@/lib/rubric/mpre-calculator";
 import { PRACTICE_SCENARIOS, DIFFICULTY_TIERS } from "@/lib/constants/scenarios";
-import { SpeechRecognizer } from "@/lib/audio/speech-recognizer";
 import { detectFillerWords } from "@/lib/audio/filler-detector";
-import { CrowdAudioSynthesizer } from "@/lib/audio/crowd-audio";
+
+// ── Dynamic imports for heavy components (code-split) ──
+// Three.js VirtualAuditorium (~509 KB) — loaded only when rehearse page mounts
+const VirtualAuditorium = dynamic(
+  () => import("@/components/3d/VirtualAuditorium").then(m => ({ default: m.VirtualAuditorium })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full min-h-[360px] bg-slate-900 rounded-2xl animate-pulse flex items-center justify-center">
+        <span className="text-slate-400 text-sm">Đang tải Khán phòng 3D...</span>
+      </div>
+    ),
+  }
+);
+
+// CameraHUD — webcam/audio processing, no SSR
+const CameraHUD = dynamic(
+  () => import("@/components/rehearsal/CameraHUD").then(m => ({ default: m.CameraHUD })),
+  { ssr: false, loading: () => <div className="w-full h-64 bg-slate-800 rounded-xl animate-pulse" /> }
+);
+
+// AIJudgePanel — TTS/STT, no SSR
+const AIJudgePanel = dynamic(
+  () => import("@/components/evaluation/AIJudgePanel").then(m => ({ default: m.AIJudgePanel })),
+  { ssr: false }
+);
 
 export default function RehearsePage() {
   const router = useRouter();
@@ -41,7 +63,7 @@ export default function RehearsePage() {
   const [aiQuestions, setAiQuestions] = useState<string[]>([]);
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
 
-  const recognizerRef = useRef<SpeechRecognizer | null>(null);
+  const recognizerRef = useRef<any>(null);
 
   const scenario = PRACTICE_SCENARIOS.find((s) => s.id === scenarioId) || PRACTICE_SCENARIOS[1];
   const difficulty = DIFFICULTY_TIERS.find((d) => d.id === difficultyId) || DIFFICULTY_TIERS[1];
@@ -119,24 +141,28 @@ export default function RehearsePage() {
     }
   }, [wordCount, elapsedSeconds, rehearsalPhase]);
 
-  // Audio & Speech Recognizer Lifecycle
+  // Audio & Speech Recognizer Lifecycle (lazy-loaded)
   useEffect(() => {
     if (rehearsalPhase === "presenting" && !isPaused) {
       if (!recognizerRef.current) {
-        recognizerRef.current = new SpeechRecognizer({
-          lang: "vi-VN",
-          onTranscript: (fullText, interimText, totalWords) => {
-            const combined = (fullText + " " + interimText).trim();
-            setTranscript(combined);
-            setWordCount(totalWords);
+        import("@/lib/audio/speech-recognizer").then(({ SpeechRecognizer }) => {
+          recognizerRef.current = new SpeechRecognizer({
+            lang: "vi-VN",
+            onTranscript: (fullText, interimText, totalWords) => {
+              const combined = (fullText + " " + interimText).trim();
+              setTranscript(combined);
+              setWordCount(totalWords);
 
-            // Detect Vietnamese fillers in real-time
-            const fillerAnalysis = detectFillerWords(combined, elapsedSeconds || 1, "vi");
-            setFillerCount(fillerAnalysis.totalFillers);
-          },
+              // Detect Vietnamese fillers in real-time
+              const fillerAnalysis = detectFillerWords(combined, elapsedSeconds || 1, "vi");
+              setFillerCount(fillerAnalysis.totalFillers);
+            },
+          });
+          recognizerRef.current.start();
         });
+      } else {
+        recognizerRef.current.start();
       }
-      recognizerRef.current.start();
     } else {
       recognizerRef.current?.stop();
     }
@@ -148,25 +174,30 @@ export default function RehearsePage() {
 
   // Dynamic Audience Reaction Engine & Procedural Sound Synthesis
   useEffect(() => {
-    const crowdAudio = CrowdAudioSynthesizer.getInstance();
+    let cancelled = false;
+    import("@/lib/audio/crowd-audio").then(({ CrowdAudioSynthesizer }) => {
+      if (cancelled) return;
+      const crowdAudio = CrowdAudioSynthesizer.getInstance();
 
-    if (rehearsalPhase === "presenting") {
-      if (eyeContactRatio >= 70 && wpm >= 115 && wpm <= 150) {
-        setAudienceReaction("attentive");
-        crowdAudio.stopMurmur();
-      } else if (eyeContactRatio < 40 || (elapsedSeconds > 10 && wpm < 80) || wpm > 175) {
-        setAudienceReaction("distracted");
-        crowdAudio.startMurmur();
+      if (rehearsalPhase === "presenting") {
+        if (eyeContactRatio >= 70 && wpm >= 115 && wpm <= 150) {
+          setAudienceReaction("attentive");
+          crowdAudio.stopMurmur();
+        } else if (eyeContactRatio < 40 || (elapsedSeconds > 10 && wpm < 80) || wpm > 175) {
+          setAudienceReaction("distracted");
+          crowdAudio.startMurmur();
+        } else {
+          setAudienceReaction("neutral");
+          crowdAudio.stopMurmur();
+        }
+      } else if (rehearsalPhase === "completed") {
+        setAudienceReaction("applause");
+        crowdAudio.playApplause(4.0);
       } else {
-        setAudienceReaction("neutral");
         crowdAudio.stopMurmur();
       }
-    } else if (rehearsalPhase === "completed") {
-      setAudienceReaction("applause");
-      crowdAudio.playApplause(4.0);
-    } else {
-      crowdAudio.stopMurmur();
-    }
+    });
+    return () => { cancelled = true; };
   }, [rehearsalPhase, eyeContactRatio, wpm, elapsedSeconds]);
 
   const handleStartSpeaking = () => {
@@ -253,7 +284,9 @@ export default function RehearsePage() {
       // Complete rehearsal and navigate to report
       setRehearsalPhase("completed");
       setAudienceReaction("applause");
-      CrowdAudioSynthesizer.getInstance().playApplause(4.5);
+      import("@/lib/audio/crowd-audio").then(({ CrowdAudioSynthesizer }) => {
+        CrowdAudioSynthesizer.getInstance().playApplause(4.5);
+      });
 
       // Compute finalized MPRE diagnostic score
       const finalDuration = Math.max(30, elapsedSeconds);

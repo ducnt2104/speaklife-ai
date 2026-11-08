@@ -17,7 +17,7 @@ export interface CameraHUDProps {
   onPermissionDenied?: () => void;
 }
 
-export const CameraHUD: React.FC<CameraHUDProps> = ({
+export const CameraHUD: React.FC<CameraHUDProps> = React.memo(({
   isPracticing,
   externalWpm = 0,
   onMetricsUpdate,
@@ -340,4 +340,6 @@ export const CameraHUD: React.FC<CameraHUDProps> = ({
       )}
     </div>
   );
-};
+});
+
+CameraHUD.displayName = "CameraHUD";
