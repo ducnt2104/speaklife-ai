@@ -11,6 +11,8 @@ import { MPREEvaluationResult } from "@/lib/rubric/mpre-calculator";
 function ReportContent() {
   const searchParams = useSearchParams();
   const [report, setReport] = useState<MPREEvaluationResult | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [fillerInstances, setFillerInstances] = useState<Array<{ word: string; timestampSec: number; contextSnippet: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -40,7 +42,15 @@ function ReportContent() {
       const stored = sessionStorage.getItem("speaklife_final_report");
       if (stored) {
         try {
-          setReport(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          // Extract enriched data if present
+          if (parsed.aiAnalysis) {
+            setAiAnalysis(parsed.aiAnalysis);
+          }
+          if (parsed.fillerInstances) {
+            setFillerInstances(parsed.fillerInstances);
+          }
+          setReport(parsed);
           return;
         } catch {
           // Invalid data
@@ -193,6 +203,100 @@ function ReportContent() {
           ))}
         </div>
       </div>
+
+      {/* AI Content Analysis — chi tiết trích dẫn từ Gemini */}
+      {aiAnalysis && aiAnalysis.contentAnalysis && (
+        <Card className="p-6 bg-surface border-border space-y-4">
+          <h3 className="font-heading font-bold text-foreground text-lg flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" />
+            <span>Phân Tích Nội Dung Chi Tiết (AI)</span>
+          </h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {aiAnalysis.contentAnalysis.structureAssessment && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 p-3.5 rounded-xl border border-blue-200 dark:border-blue-800">
+                <div className="font-semibold text-blue-700 dark:text-blue-400 mb-1.5">Bố cục (Mở - Thân - Kết)</div>
+                <p className="text-text-secondary leading-relaxed">{aiAnalysis.contentAnalysis.structureAssessment}</p>
+              </div>
+            )}
+            {aiAnalysis.contentAnalysis.evidenceQuality && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                <div className="font-semibold text-emerald-700 dark:text-emerald-400 mb-1.5">Dẫn chứng & Số liệu</div>
+                <p className="text-text-secondary leading-relaxed">{aiAnalysis.contentAnalysis.evidenceQuality}</p>
+              </div>
+            )}
+            {aiAnalysis.contentAnalysis.logicFlaws && (
+              <div className="bg-amber-50 dark:bg-amber-950/20 p-3.5 rounded-xl border border-amber-200 dark:border-amber-800">
+                <div className="font-semibold text-amber-700 dark:text-amber-400 mb-1.5">Lỗi ngụy biện / Luận điểm yếu</div>
+                <p className="text-text-secondary leading-relaxed">{aiAnalysis.contentAnalysis.logicFlaws}</p>
+              </div>
+            )}
+            {aiAnalysis.contentAnalysis.depthAssessment && (
+              <div className="bg-violet-50 dark:bg-violet-950/20 p-3.5 rounded-xl border border-violet-200 dark:border-violet-800">
+                <div className="font-semibold text-violet-700 dark:text-violet-400 mb-1.5">Chiều sâu nội dung</div>
+                <p className="text-text-secondary leading-relaxed">{aiAnalysis.contentAnalysis.depthAssessment}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Top Strengths / Weaknesses from AI */}
+          {(aiAnalysis.topStrengths?.length > 0 || aiAnalysis.topWeaknesses?.length > 0) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {aiAnalysis.topStrengths?.length > 0 && (
+                <div>
+                  <div className="font-semibold text-emerald-600 dark:text-emerald-400 text-xs mb-2 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Điểm mạnh nổi bật
+                  </div>
+                  <ul className="space-y-1.5">
+                    {aiAnalysis.topStrengths.map((s: string, i: number) => (
+                      <li key={i} className="text-xs text-text-secondary bg-emerald-50/50 dark:bg-emerald-950/10 px-3 py-2 rounded-lg border border-emerald-100 dark:border-emerald-900">
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {aiAnalysis.topWeaknesses?.length > 0 && (
+                <div>
+                  <div className="font-semibold text-amber-600 dark:text-amber-400 text-xs mb-2 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Cần cải thiện
+                  </div>
+                  <ul className="space-y-1.5">
+                    {aiAnalysis.topWeaknesses.map((w: string, i: number) => (
+                      <li key={i} className="text-xs text-text-secondary bg-amber-50/50 dark:bg-amber-950/10 px-3 py-2 rounded-lg border border-amber-100 dark:border-amber-900">
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Filler Words Detail — danh sách từ đệm kèm mốc thời gian */}
+      {fillerInstances.length > 0 && (
+        <Card className="p-6 bg-surface border-border">
+          <h3 className="font-heading font-bold text-foreground text-lg flex items-center gap-2 mb-3">
+            <Volume2 className="w-5 h-5 text-amber-500" />
+            <span>Chi Tiết Từ Đệm Phát Hiện ({fillerInstances.length} lần)</span>
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {fillerInstances.slice(0, 15).map((f, i) => (
+              <div key={i} className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 text-xs">
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded">{f.word}</span>
+                <span className="text-text-muted">
+                  phút {Math.floor(f.timestampSec / 60)}:{String(f.timestampSec % 60).padStart(2, "0")}
+                </span>
+              </div>
+            ))}
+          </div>
+          {fillerInstances.length > 15 && (
+            <p className="text-[11px] text-text-muted mt-2">... và {fillerInstances.length - 15} lần nữa</p>
+          )}
+        </Card>
+      )}
 
       {/* Actionable Micro-Drills Recommendation Box */}
       <Card className="p-6 bg-violet-50/60 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800">

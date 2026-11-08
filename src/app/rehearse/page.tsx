@@ -53,8 +53,12 @@ export default function RehearsePage() {
   const [dbLevel, setDbLevel] = useState(-60);
   const [fillerCount, setFillerCount] = useState(0);
   const [transcript, setTranscript] = useState("");
+  const [interimText, setInterimText] = useState("");
   const [wordCount, setWordCount] = useState(0);
   const [audienceReaction, setAudienceReaction] = useState<"neutral" | "attentive" | "distracted" | "applause">("neutral");
+
+  // Accumulated filler instances for report (with timestamps)
+  const fillerInstancesRef = useRef<Array<{ word: string; timestampSec: number; contextSnippet: string }>>([]);
 
   // Q&A State
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -133,7 +137,7 @@ export default function RehearsePage() {
     return () => clearInterval(timer);
   }, [rehearsalPhase, isPaused]);
 
-  // Dynamic WPM & Filler Calculation when Word Count or Time changes
+  // Dynamic WPM calculation (throttled — only on wordCount change, not every second)
   useEffect(() => {
     if (rehearsalPhase === "presenting" && elapsedSeconds > 2) {
       const currentWpm = Math.round((wordCount / (elapsedSeconds / 60)));
@@ -141,7 +145,25 @@ export default function RehearsePage() {
     }
   }, [wordCount, elapsedSeconds, rehearsalPhase]);
 
+  // Debounced Filler Word Detection (runs every 800ms on transcript change, NOT on every keystroke)
+  useEffect(() => {
+    if (rehearsalPhase !== "presenting" || !transcript) return;
+    const timer = setTimeout(() => {
+      const combined = (transcript + " " + interimText).trim();
+      const fillerAnalysis = detectFillerWords(combined, Math.max(1, elapsedSeconds), "vi");
+      setFillerCount(fillerAnalysis.totalFillers);
+      // Store detailed instances for final report
+      fillerInstancesRef.current = fillerAnalysis.instances.map(inst => ({
+        word: inst.word,
+        timestampSec: inst.timestampSeconds,
+        contextSnippet: inst.matchedText,
+      }));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [transcript, rehearsalPhase, elapsedSeconds, interimText]);
+
   // Audio & Speech Recognizer Lifecycle (lazy-loaded)
+  // STT runs via native Web Speech API (vi-VN) with interimResults for real-time display
   useEffect(() => {
     if (rehearsalPhase === "presenting" && !isPaused) {
       if (!recognizerRef.current) {
@@ -149,13 +171,9 @@ export default function RehearsePage() {
           recognizerRef.current = new SpeechRecognizer({
             lang: "vi-VN",
             onTranscript: (fullText, interimText, totalWords) => {
-              const combined = (fullText + " " + interimText).trim();
-              setTranscript(combined);
+              setTranscript(fullText);
+              setInterimText(interimText);
               setWordCount(totalWords);
-
-              // Detect Vietnamese fillers in real-time
-              const fillerAnalysis = detectFillerWords(combined, elapsedSeconds || 1, "vi");
-              setFillerCount(fillerAnalysis.totalFillers);
             },
           });
           recognizerRef.current.start();
@@ -170,7 +188,7 @@ export default function RehearsePage() {
     return () => {
       recognizerRef.current?.stop();
     };
-  }, [rehearsalPhase, isPaused, elapsedSeconds]);
+  }, [rehearsalPhase, isPaused]);
 
   // Dynamic Audience Reaction Engine & Procedural Sound Synthesis
   useEffect(() => {
@@ -291,6 +309,38 @@ export default function RehearsePage() {
       // Compute finalized MPRE diagnostic score
       const finalDuration = Math.max(30, elapsedSeconds);
       const finalWords = Math.max(wordCount, Math.round((finalDuration / 60) * (wpm || 120)));
+      const finalTranscript = (transcript + " " + interimText).trim();
+      const actualFillers = fillerInstancesRef.current;
+
+      // Request AI content analysis in parallel (non-blocking for UX)
+      let aiContentScore = 15; // Default before AI responds
+      let aiAnalysis: any = null;
+      try {
+        const evalRes = await fetch("/api/ai/evaluate-presentation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript: finalTranscript,
+            durationSeconds: finalDuration,
+            eyeContactRatio,
+            averageWpm: wpm || 120,
+            fillerOccurrences: actualFillers,
+            shoulderTiltVariance: 4,
+            averageRmsDecibels: dbLevel,
+            presentationTitle: outlineTitle,
+            scenario: scenarioId,
+          }),
+        });
+        if (evalRes.ok) {
+          const evalData = await evalRes.json();
+          if (evalData.success && evalData.data) {
+            aiContentScore = evalData.data.contentLogicScore ?? 15;
+            aiAnalysis = evalData.data;
+          }
+        }
+      } catch (evalErr) {
+        console.warn("AI presentation evaluation unavailable, using heuristic:", evalErr);
+      }
 
       const evaluation = calculateMPREScore({
         durationSeconds: finalDuration,
@@ -302,14 +352,22 @@ export default function RehearsePage() {
         averageRmsDecibels: dbLevel,
         pitchF0StdDev: 16,
         fillerWordCount: fillerCount,
-        aiContentScore: 18,
+        aiContentScore,
         rebuttalRounds: updatedRounds,
       });
 
-      sessionStorage.setItem("speaklife_final_report", JSON.stringify(evaluation));
-      sessionStorage.setItem("speaklife_final_transcript", transcript);
+      // Merge AI analysis into evaluation for rich report display
+      const enrichedEvaluation = {
+        ...evaluation,
+        aiAnalysis,
+        transcript: finalTranscript,
+        fillerInstances: actualFillers,
+      };
 
-      // Also save to server if possible
+      sessionStorage.setItem("speaklife_final_report", JSON.stringify(enrichedEvaluation));
+      sessionStorage.setItem("speaklife_final_transcript", finalTranscript);
+
+      // Also save to server if possible — with REAL telemetry data
       try {
         await fetch("/api/report/save", {
           method: "POST",
@@ -319,8 +377,12 @@ export default function RehearsePage() {
             durationSeconds: finalDuration,
             eyeContactRatio: eyeContactRatio / 100,
             averageWpm: wpm || 120,
-            fillerOccurrences: [],
+            fillerOccurrences: actualFillers,
             rebuttalRounds: updatedRounds,
+            aiContentScore,
+            title: outlineTitle,
+            scenario: scenarioId,
+            difficulty: difficultyId,
           }),
         });
       } catch {
@@ -398,7 +460,14 @@ export default function RehearsePage() {
             <div className="flex items-center gap-2">
               <Mic className="w-4 h-4 text-primary shrink-0" />
               <span className="line-clamp-1">
-                {transcript ? `"${transcript.slice(-65)}"` : "Micro đang lắng nghe nhận diện giọng nói tiếng Việt..."}
+                {transcript || interimText
+                  ? <>
+                      &ldquo;{transcript.slice(-50)}
+                      {interimText && <span className="text-primary/60 italic">{interimText.slice(-30)}</span>}
+                      &rdquo;
+                    </>
+                  : "Micro đang lắng nghe nhận diện giọng nói tiếng Việt..."
+                }
               </span>
             </div>
             <div className="flex items-center gap-3 shrink-0 font-mono text-xs">
