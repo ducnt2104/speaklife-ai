@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Award, Clock, Send, Mic, MicOff, Volume2, VolumeX, CheckCircle2, AlertTriangle, Sparkles } from "lucide-react";
-import { Button, Badge } from "@/components/ui";
+import { Button, Badge, MathText } from "@/components/ui";
 import { SpeechSynthesizer } from "@/lib/audio/speech-synthesizer";
 import { SpeechRecognizer } from "@/lib/audio/speech-recognizer";
 
@@ -202,7 +202,7 @@ export const AIJudgePanel: React.FC<AIJudgePanelProps> = ({
           </div>
 
           <div className="rounded-xl bg-violet-50/70 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900 p-4 text-foreground font-medium text-sm leading-relaxed mb-4 relative">
-            &ldquo;{currentQuestion}&rdquo;
+            &ldquo;<MathText text={currentQuestion} inline />&rdquo;
           </div>
         </div>
 
@@ -234,7 +234,7 @@ export const AIJudgePanel: React.FC<AIJudgePanelProps> = ({
           <div className="flex items-center justify-between">
             <div className="text-xs text-text-muted flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Công thức: Lắng nghe $\to$ Dẫn chứng $\to$ Khẳng định</span>
+              <MathText text="Công thức: Lắng nghe $\to$ Dẫn chứng $\to$ Khẳng định" inline />
             </div>
 
             <div className="flex items-center gap-2">

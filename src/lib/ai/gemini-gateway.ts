@@ -1,6 +1,6 @@
 /**
- * SpeakLife AI — Google Gemini 2.0 Flash Adversarial AI Gateway
- * Clean abstraction with Prompt Chaining, Token Budgets, Zod Schema Enforcement, and Heuristic Fallback.
+ * SpeakLife AI — Google Gemini Adversarial AI Gateway
+ * Clean abstraction with Markdown JSON extraction, Token Budgets, Zod Schema Enforcement, and Dynamic Contextual Fallback.
  */
 
 import { z } from "zod";
@@ -32,6 +32,49 @@ export const AnswerEvaluationSchema = z.object({
   suggestedResponse: z.string(),
 });
 
+/**
+ * Robust JSON extraction helper that cleanly strips markdown code fences (```json ... ```)
+ * and isolates JSON objects from surrounding text.
+ */
+export function extractCleanJson<T = any>(text: string): T {
+  if (!text || typeof text !== "string") {
+    throw new Error("Invalid or empty AI response text");
+  }
+
+  let cleaned = text.trim();
+
+  // Strip markdown code fences ```json ... ``` or ``` ... ```
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+  }
+
+  // Find first { or [
+  const firstBrace = cleaned.indexOf("{");
+  const firstBracket = cleaned.indexOf("[");
+  let startIdx = -1;
+  if (firstBrace !== -1 && firstBracket !== -1) {
+    startIdx = Math.min(firstBrace, firstBracket);
+  } else if (firstBrace !== -1) {
+    startIdx = firstBrace;
+  } else if (firstBracket !== -1) {
+    startIdx = firstBracket;
+  }
+
+  if (startIdx > 0) {
+    cleaned = cleaned.substring(startIdx);
+  }
+
+  // Find last } or ]
+  const lastBrace = cleaned.lastIndexOf("}");
+  const lastBracket = cleaned.lastIndexOf("]");
+  const endIdx = Math.max(lastBrace, lastBracket);
+  if (endIdx !== -1 && endIdx < cleaned.length - 1) {
+    cleaned = cleaned.substring(0, endIdx + 1);
+  }
+
+  return JSON.parse(cleaned) as T;
+}
+
 export class GeminiGateway {
   private getApiKey(): string | null {
     return getEffectiveGeminiApiKey();
@@ -51,29 +94,33 @@ export class GeminiGateway {
     difficulty: string,
     outlineText: string
   ): Promise<JudgeQuestion[]> {
+    const cleanTitle = title?.trim() || "Đề tài nghiên cứu khoa học kỹ thuật";
+    const cleanOutline = outlineText?.trim() || cleanTitle;
+
     // Check for prompt injection
-    const injectionCheck = detectPromptInjection(outlineText);
+    const injectionCheck = detectPromptInjection(cleanOutline);
     if (injectionCheck.isSuspicious) {
       console.warn(`[Prompt Guard Alert] Prompt injection pattern detected in outline: ${injectionCheck.matchedPattern}`);
     }
 
-    const safeOutline = wrapUntrustedContent("presentation_outline", truncateSafe(outlineText, 3000));
+    const safeOutline = wrapUntrustedContent("presentation_outline", truncateSafe(cleanOutline, 4000));
 
     const apiKey = this.getApiKey();
-    // If no API key or in offline environment, return pedagogical questions calibrated for THPT
+    // If no API key or in offline environment, return dynamic pedagogical questions tailored to the student's topic
     if (!apiKey) {
-      return this.getFallbackQuestions(scenario, difficulty);
+      return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
     }
 
     const systemPrompt = `
-Bạn là Ban Giám Khảo phản biện chuyên môn của cuộc thi Gameshow “Đấu trường AI” và nghiên cứu KHKT dành cho học sinh THPT.
-Nhiệm vụ của bạn: Dựa trên dàn ý bài thuyết trình của học sinh, hãy tìm ra đúng 2 câu hỏi phản biện sắc bén nhất nhắm vào các lỗ hổng logic, thiếu số liệu thực nghiệm, hoặc giải pháp chưa khả thi trong thực tế lớp học.
+Bạn là Ban Giám Khảo phản biện chuyên môn của cuộc thi KHKT và Gameshow “Đấu trường AI” dành cho học sinh THPT.
+Nhiệm vụ tối quan trọng: Đọc kỹ tiêu đề và nội dung bài thuyết trình của học sinh dưới đây, sau đó đặt đúng 2 câu hỏi phản biện ngắn gọn, sắc bén NHẮM TRỰC TIẾP VÀO ĐỀ TÀI VÀ NỘI DUNG NÀY.
+TUYỆT ĐỐI KHÔNG hỏi về các đề tài khác không liên quan. Mọi câu hỏi phải gắn liền với các thuật ngữ, phương pháp, và số liệu mà học sinh nêu trong dàn ý.
 
 Các thành viên Ban Giám Khảo:
-1. Thầy Vũ Xuân Định (Chuyên gia Phương pháp luận & Toán học): Chất vấn tính khả thi và số liệu đối chứng.
-2. Cô Nguyễn Thị Thu Hà (Chuyên gia Ngôn ngữ & Sư phạm): Chất vấn chiều sâu nội dung và tính thuyết phục.
+1. Thầy Vũ Xuân Định (Chuyên gia Phương pháp luận & Toán học): Chất vấn tính khả thi, độ tin cậy và số liệu đối chứng.
+2. Cô Nguyễn Thị Thu Hà (Chuyên gia Ngôn ngữ & Sư phạm): Chất vấn chiều sâu nội dung và tính ứng dụng thực tiễn.
 
-Yêu cầu trả về đúng định dạng JSON:
+BẮT BUỘC trả về đúng định dạng JSON hợp lệ:
 {
   "questions": [
     {
@@ -81,8 +128,17 @@ Yêu cầu trả về đúng định dạng JSON:
       "judgeName": "Thầy Vũ Xuân Định",
       "judgeRole": "Giám khảo Phương pháp luận",
       "avatarColor": "bg-brand-primary",
-      "questionText": "<Câu hỏi chất vấn cụ thể>",
-      "targetedFlaw": "<Lỗ hổng luận cứ cần làm rõ>",
+      "questionText": "<Câu hỏi chất vấn cụ thể gắn liền với đề tài>",
+      "targetedFlaw": "<Lỗ hổng luận cứ hoặc điều kiện biên cần làm rõ>",
+      "timeLimitSec": 30
+    },
+    {
+      "id": "q2",
+      "judgeName": "Cô Nguyễn Thị Thu Hà",
+      "judgeRole": "Giám khảo Sư phạm & Ứng dụng",
+      "avatarColor": "bg-brand-secondary",
+      "questionText": "<Câu hỏi chất vấn chiều sâu ứng dụng thực tiễn của đề tài>",
+      "targetedFlaw": "<Tính khả thi trong môi trường thực tế>",
       "timeLimitSec": 30
     }
   ]
@@ -100,26 +156,30 @@ Yêu cầu trả về đúng định dạng JSON:
               role: "user",
               parts: [
                 { text: systemPrompt },
-                { text: `Bối cảnh: ${scenario} | Độ khó: ${difficulty}\nTiêu đề bài nói: ${title}\n${safeOutline}` },
+                { text: `Bối cảnh: ${scenario} | Độ khó: ${difficulty}\nTiêu đề đề tài: ${cleanTitle}\n${safeOutline}` },
               ],
             },
           ],
           generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 1024,
+            temperature: 0.2,
+            maxOutputTokens: 4096,
             responseMimeType: "application/json",
           },
         }),
       });
 
       if (!response.ok) {
-        console.warn(`Gemini API returned status ${response.status}, using robust fallback`);
-        return this.getFallbackQuestions(scenario, difficulty);
+        console.warn(`Gemini API returned status ${response.status}, using dynamic fallback for topic: ${cleanTitle}`);
+        return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
       }
 
       const rawData = await response.json();
       const rawText = rawData?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsedJson = JSON.parse(rawText);
+      if (!rawText) {
+        return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
+      }
+
+      const parsedJson = extractCleanJson(rawText);
       const validated = JudgeQuestionsSchema.parse(parsedJson);
 
       return validated.questions.map((q) => ({
@@ -127,8 +187,8 @@ Yêu cầu trả về đúng định dạng JSON:
         judgeAvatar: "",
       }));
     } catch (err) {
-      console.warn("Gemini call failed, utilizing graceful heuristic fallback", err);
-      return this.getFallbackQuestions(scenario, difficulty);
+      console.warn("Gemini call or JSON parse failed, utilizing dynamic contextual fallback", err);
+      return this.getFallbackQuestions(cleanTitle, cleanOutline, scenario, difficulty);
     }
   }
 
@@ -180,8 +240,8 @@ Trả về JSON:
             },
           ],
           generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 800,
+            temperature: 0.2,
+            maxOutputTokens: 2048,
             responseMimeType: "application/json",
           },
         }),
@@ -193,7 +253,11 @@ Trả về JSON:
 
       const rawData = await response.json();
       const rawText = rawData?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = JSON.parse(rawText);
+      if (!rawText) {
+        return this.getFallbackEvaluation(userAnswer, responseTimeSec);
+      }
+
+      const parsed = extractCleanJson(rawText);
       return AnswerEvaluationSchema.parse(parsed);
     } catch (err) {
       return this.getFallbackEvaluation(userAnswer, responseTimeSec);
@@ -201,29 +265,37 @@ Trả về JSON:
   }
 
   /**
-   * Resilient, high-standard fallback questions for school competitions.
+   * Dynamic contextual fallback questions:
+   * Generates questions calibrated strictly to the user's title and outline,
+   * completely avoiding hardcoded mock topics when the user enters their own project.
    */
-  private getFallbackQuestions(scenario: string, difficulty: string): JudgeQuestion[] {
+  private getFallbackQuestions(
+    title: string,
+    outlineText: string,
+    scenario: string,
+    difficulty: string
+  ): JudgeQuestion[] {
+    const topic = title.trim() || "đề tài nghiên cứu";
+    const snippet = outlineText.trim().slice(0, 100);
+
     return [
       {
         id: "q1",
         judgeName: "Thầy Vũ Xuân Định",
-        judgeRole: "Giám khảo Phương pháp luận & Toán học",
+        judgeRole: "Giám khảo Phương pháp luận & Thực nghiệm",
         avatarColor: "bg-brand-primary",
-        questionText:
-          "Thầy nhận thấy đề tài của nhóm có tính thời sự cao. Tuy nhiên, trong điều kiện phòng học thực tế ánh sáng yếu hoặc học sinh ngồi nghiêng, cơ sở khoa học nào chứng minh giải pháp của em vẫn duy trì độ chính xác trên 85%?",
-        targetedFlaw: "Điều kiện biên và tính ổn định thực nghiệm",
+        questionText: `Đối với đề tài "${topic}", cơ sở thực nghiệm và thông số đo lường nào giúp nhóm chứng minh giải pháp đạt độ chính xác và tính ổn định cao trong điều kiện thực tế?`,
+        targetedFlaw: "Điều kiện biên và tính ổn định thực nghiệm của giải pháp",
         timeLimitSec: 30,
         judgeAvatar: "",
       },
       {
         id: "q2",
         judgeName: "Cô Nguyễn Thị Thu Hà",
-        judgeRole: "Giám khảo Sư phạm & Ngôn ngữ học",
+        judgeRole: "Giám khảo Sư phạm & Ứng dụng",
         avatarColor: "bg-brand-secondary",
-        questionText:
-          "Trong phần trình bày, em có khẳng định giải pháp giúp 'loại bỏ hoàn toàn nỗi sợ hãi'. Em hãy làm rõ sự khác biệt giữa việc giảm lo âu tạm thời và việc hình thành kỹ năng phản xạ bền vững ở người học?",
-        targetedFlaw: "Khái quát hóa quá mức luận điểm tâm lý học",
+        questionText: `Trong nội dung "${snippet || topic}", nếu hội đồng cho rằng chi phí triển khai hoặc mức độ tiếp cận của người dùng là rào cản lớn, bạn sẽ bảo vệ tính khả thi của dự án như thế nào?`,
+        targetedFlaw: "Tính khả thi thực tiễn và tính kinh tế của giải pháp",
         timeLimitSec: 30,
         judgeAvatar: "",
       },
@@ -240,10 +312,10 @@ Trả về JSON:
         ? "Phản xạ nhanh, bảo vệ được trọng tâm luận điểm và giữ thái độ tôn trọng ban giám khảo."
         : "Nắm được câu hỏi, tuy nhiên còn ngập ngừng và thiếu dẫn chứng thực tế.",
       weaknesses: isDetailed
-        ? "Có thể bổ sung thêm số liệu đo đạc cụ thể từ đợt khảo sát thực tế tại Đồng Nai để câu trả lời thêm đanh thép."
-        : "Cần vận dụng cấu trúc: Lắng nghe $\to$ Đưa số liệu thực nghiệm $\to$ Khẳng định giải pháp.",
+        ? "Có thể bổ sung thêm số liệu đo đạc cụ thể để câu trả lời thêm đanh thép."
+        : "Cần vận dụng cấu trúc: Lắng nghe $\\to$ Đưa số liệu thực nghiệm $\\to$ Khẳng định giải pháp.",
       suggestedResponse:
-        "Thưa Thầy/Cô, em hoàn toàn ghi nhận băn khoăn rất xác đáng về điều kiện phòng học. Để khắc phục điều này, trong thử nghiệm trên 30 học sinh tại THPT Trấn Biên, chúng em đã hiệu chuẩn ngưỡng thích ứng ánh sáng và độ chính xác vẫn duy trì đạt 89.4%.",
+        "Thưa Thầy/Cô, em hoàn toàn ghi nhận băn khoăn rất xác đáng của Hội đồng. Để giải quyết vấn đề này, nhóm chúng em đã tiến hành khảo sát và hiệu chuẩn ngưỡng thích ứng thực tế, qua đó chứng minh tính khả thi đạt trên 88%.",
     };
   }
 }

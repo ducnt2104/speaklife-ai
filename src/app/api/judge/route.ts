@@ -5,10 +5,10 @@ import { rateLimiter } from "@/lib/security/rate-limiter";
 import { sanitizeHtml, stripControlCharacters, sanitizeNoSql } from "@/lib/security/input-sanitizer";
 
 const QuestionRequestSchema = z.object({
-  title: z.string().min(1).max(200),
-  scenario: z.string().min(1).max(100),
-  difficulty: z.string().min(1).max(50),
-  outlineText: z.string().min(1).max(5000),
+  title: z.string().max(200).optional().default("Đề tài nghiên cứu KHKT"),
+  scenario: z.string().max(100).optional().default("stem_khkt"),
+  difficulty: z.string().max(50).optional().default("standard"),
+  outlineText: z.string().max(10000).optional().default(""),
 });
 
 const AnswerEvaluationRequestSchema = z.object({

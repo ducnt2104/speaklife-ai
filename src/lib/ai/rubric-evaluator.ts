@@ -175,7 +175,7 @@ export function evaluateMultimodalRubric(input: EvaluationInput): DiagnosticRepo
       },
       {
         id: "drill-3",
-        title: "Công thức Đối đáp 3 Bước: Agree $\to$ Evidence $\to$ Conclude",
+        title: "Công thức Đối đáp 3 Bước: Agree $\\to$ Evidence $\\to$ Conclude",
         durationMinutes: 5,
         description: "Khi nhận câu hỏi khó từ ban giám khảo, hãy mở đầu bằng việc ghi nhận băn khoăn trước khi trình bày số liệu.",
         targetWeakness: "Tăng điểm phản biện thuyết phục",

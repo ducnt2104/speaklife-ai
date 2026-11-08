@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Pause, Square, Award, ShieldCheck, CheckCircle2, ArrowRight, Mic, Volume2 } from "lucide-react";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, MathText } from "@/components/ui";
 import { VirtualAuditorium } from "@/components/3d/VirtualAuditorium";
 import { CameraHUD } from "@/components/rehearsal/CameraHUD";
 import { AIJudgePanel } from "@/components/evaluation/AIJudgePanel";
@@ -46,10 +46,10 @@ export default function RehearsePage() {
   const scenario = PRACTICE_SCENARIOS.find((s) => s.id === scenarioId) || PRACTICE_SCENARIOS[1];
   const difficulty = DIFFICULTY_TIERS.find((d) => d.id === difficultyId) || DIFFICULTY_TIERS[1];
 
-  // Fallback questions in case AI API is unavailable
+  // Dynamic contextual fallback questions (strictly based on the user's topic)
   const fallbackQuestions = [
-    "Giải pháp của nhóm có thể áp dụng trong điều kiện thực tế phòng học thiếu sáng hay thiết bị yếu không? Hãy giải thích cơ sở kỹ thuật.",
-    "Kết quả thử nghiệm trên 30 học sinh có đủ đại diện để khái quát hóa kết luận không? Nhóm đã xử lý yếu tố sai lệch mẫu như thế nào?",
+    `Đối với đề tài "${outlineTitle || "nghiên cứu"}", nhóm có thể làm rõ cơ sở thực nghiệm và thông số chứng minh tính ổn định khi triển khai thực tế không?`,
+    `Trong bài thuyết trình, nhóm đã kiểm soát sai số thực nghiệm và các rủi ro kỹ thuật phát sinh như thế nào?`,
   ];
 
   const currentQuestions = aiQuestions.length > 0 ? aiQuestions : fallbackQuestions;
@@ -60,9 +60,43 @@ export default function RehearsePage() {
       const s = sessionStorage.getItem("speaklife_scenario");
       const d = sessionStorage.getItem("speaklife_difficulty");
       const t = sessionStorage.getItem("speaklife_outline_title");
+      const preQuestions = sessionStorage.getItem("speaklife_ai_questions");
+
       if (s) setScenarioId(s);
       if (d) setDifficultyId(d);
       if (t) setOutlineTitle(t);
+
+      if (preQuestions) {
+        try {
+          const parsed = JSON.parse(preQuestions);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAiQuestions(parsed.map((q: any) => q.questionText || q.question || String(q)));
+          }
+        } catch {}
+      } else {
+        // Pre-fetch AI questions immediately in background so they are ready on speech finish
+        const outlineContent = sessionStorage.getItem("speaklife_outline_content") || "";
+        if (outlineContent.trim()) {
+          fetch("/api/judge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: t || "Đề tài nghiên cứu khoa học kỹ thuật",
+              scenario: s || "stem_khkt",
+              difficulty: d || "standard",
+              outlineText: outlineContent,
+            }),
+          })
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data?.questions && data.questions.length > 0) {
+                setAiQuestions(data.questions.map((q: any) => q.questionText));
+                sessionStorage.setItem("speaklife_ai_questions", JSON.stringify(data.questions));
+              }
+            })
+            .catch(() => {});
+        }
+      }
     }
   }, []);
 
@@ -144,34 +178,38 @@ export default function RehearsePage() {
     // Transition to Stage 3: Adversarial AI Q&A
     setRehearsalPhase("qna");
     setAudienceReaction("neutral");
-    setIsLoadingQuestions(true);
 
-    // Fetch real questions from AI Judge API
-    try {
-      const outlineContent =
-        typeof window !== "undefined" ? sessionStorage.getItem("speaklife_outline_content") || "" : "";
+    if (aiQuestions.length === 0) {
+      setIsLoadingQuestions(true);
 
-      const res = await fetch("/api/judge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: outlineTitle,
-          scenario: scenarioId,
-          difficulty: difficultyId,
-          outlineText: outlineContent,
-        }),
-      });
+      // Fetch real questions from AI Judge API if not already pre-fetched
+      try {
+        const outlineContent =
+          typeof window !== "undefined" ? sessionStorage.getItem("speaklife_outline_content") || "" : "";
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.questions && data.questions.length > 0) {
-          setAiQuestions(data.questions.map((q: any) => q.questionText));
+        const res = await fetch("/api/judge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: outlineTitle || "Đề tài nghiên cứu khoa học kỹ thuật",
+            scenario: scenarioId,
+            difficulty: difficultyId,
+            outlineText: outlineContent,
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.questions && data.questions.length > 0) {
+            setAiQuestions(data.questions.map((q: any) => q.questionText));
+            sessionStorage.setItem("speaklife_ai_questions", JSON.stringify(data.questions));
+          }
         }
+      } catch (err) {
+        console.warn("Failed to fetch AI questions, using dynamic fallback:", err);
+      } finally {
+        setIsLoadingQuestions(false);
       }
-    } catch (err) {
-      console.warn("Failed to fetch AI questions, using fallback:", err);
-    } finally {
-      setIsLoadingQuestions(false);
     }
   };
 
@@ -274,7 +312,7 @@ export default function RehearsePage() {
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-status-danger animate-pulse" />
             <h2 className="font-heading font-bold text-foreground text-lg">
-              {outlineTitle || "Thuyết trình Đề tài KHKT Quốc Gia"}
+              <MathText text={outlineTitle || "Thuyết trình Đề tài KHKT Quốc Gia"} inline />
             </h2>
           </div>
           <p className="text-xs text-text-muted mt-0.5">

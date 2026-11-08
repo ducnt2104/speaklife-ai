@@ -13,3 +13,4 @@ export * from "./Select";
 export * from "./Skeleton";
 export * from "./Switch";
 export * from "./Toast";
+export * from "./MathText";

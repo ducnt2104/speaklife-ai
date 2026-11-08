@@ -2,8 +2,21 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Cpu, Globe, Award, FileText, ArrowRight, CheckCircle2, AlertCircle, Sparkles, ShieldCheck } from "lucide-react";
-import { Button, Card, Badge } from "@/components/ui";
+import {
+  GraduationCap,
+  Cpu,
+  Globe,
+  Award,
+  FileText,
+  ArrowRight,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  ShieldCheck,
+  RefreshCw,
+  HelpCircle,
+} from "lucide-react";
+import { Button, Card, Badge, MathText } from "@/components/ui";
 import { PRACTICE_SCENARIOS, DIFFICULTY_TIERS } from "@/lib/constants/scenarios";
 
 export default function SetupPage() {
@@ -13,14 +26,63 @@ export default function SetupPage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>("standard");
   const [outlineTitle, setOutlineTitle] = useState<string>("");
   const [outlineContent, setOutlineContent] = useState<string>("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Live AI Preview State
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const handleTestAiQuestions = async () => {
+    if (!outlineContent.trim()) {
+      setPreviewError("Vui lòng nhập tóm tắt nội dung bài nói trước khi thử nghiệm.");
+      return;
+    }
+
+    setIsGeneratingPreview(true);
+    setPreviewError(null);
+
+    try {
+      const res = await fetch("/api/judge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: outlineTitle.trim() || "Đề tài nghiên cứu khoa học kỹ thuật",
+          scenario: selectedScenario,
+          difficulty: selectedDifficulty,
+          outlineText: outlineContent.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Lỗi máy chủ HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.questions && data.questions.length > 0) {
+        setPreviewQuestions(data.questions);
+        sessionStorage.setItem("speaklife_ai_questions", JSON.stringify(data.questions));
+      } else {
+        throw new Error("Không nhận được câu hỏi từ AI.");
+      }
+    } catch (err: any) {
+      console.warn("AI Question preview error:", err);
+      setPreviewError(err.message || "Không thể kết nối đến AI.");
+    } finally {
+      setIsGeneratingPreview(false);
+    }
+  };
 
   const handleStartRehearsal = () => {
     // Store rehearsal settings in session storage for the live rehearsal room
     sessionStorage.setItem("speaklife_scenario", selectedScenario);
     sessionStorage.setItem("speaklife_difficulty", selectedDifficulty);
-    sessionStorage.setItem("speaklife_outline_title", outlineTitle);
-    sessionStorage.setItem("speaklife_outline_content", outlineContent);
+    sessionStorage.setItem("speaklife_outline_title", outlineTitle.trim() || "Đề tài nghiên cứu khoa học kỹ thuật");
+    sessionStorage.setItem("speaklife_outline_content", outlineContent.trim());
+
+    if (previewQuestions.length > 0) {
+      sessionStorage.setItem("speaklife_ai_questions", JSON.stringify(previewQuestions));
+    }
 
     router.push("/rehearse");
   };
@@ -99,7 +161,9 @@ export default function SetupPage() {
                     <span className="font-heading font-semibold text-foreground text-sm">{tier.label}</span>
                     {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
                   </div>
-                  <div className="text-xs text-primary font-medium mb-2">{tier.judgeName} • {tier.judgeTitle}</div>
+                  <div className="text-xs text-primary font-medium mb-2">
+                    {tier.judgeName} • {tier.judgeTitle}
+                  </div>
                   <p className="text-xs text-text-secondary leading-relaxed">{tier.description}</p>
                   <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-[11px] font-mono text-text-muted">
                     <span>{tier.rebuttalCount} câu chất vấn</span>
@@ -112,13 +176,13 @@ export default function SetupPage() {
         </div>
 
         {/* Step 3: Document & Outline Input */}
-        <Card className="p-6 bg-surface">
-          <div className="flex items-center justify-between mb-4">
+        <Card className="p-6 bg-surface space-y-4">
+          <div className="flex items-center justify-between">
             <div>
               <h3 className="font-heading font-semibold text-foreground text-base">3. Dàn Ý / Đề Cương Bài Nói</h3>
-              <p className="text-xs text-text-muted mt-0.5">Dán nội dung bài thuyết trình hoặc ghi chú để AI hiểu cấu trúc bài nói.</p>
+              <p className="text-xs text-text-muted mt-0.5">Dán nội dung bài thuyết trình để AI chuẩn bị câu hỏi phản biện thực tế.</p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+            <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
               <ShieldCheck className="w-3.5 h-3.5" />
               <span>Chống Prompt Injection & Không lưu trữ</span>
             </div>
@@ -126,34 +190,90 @@ export default function SetupPage() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Tiêu đề bài thuyết trình</label>
+              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                Tiêu đề bài thuyết trình / Dự án KHKT
+              </label>
               <input
                 type="text"
                 value={outlineTitle}
                 onChange={(e) => setOutlineTitle(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="Nhập tiêu đề đề tài..."
+                className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                placeholder="Ví dụ: Chế tạo robot hỗ trợ phục hồi chức năng chi dưới..."
               />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Nội dung tóm tắt / Các luận điểm chính</label>
+              <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-1">
+                Nội dung tóm tắt / Các luận điểm chính
+              </label>
               <textarea
                 value={outlineContent}
                 onChange={(e) => setOutlineContent(e.target.value)}
                 rows={4}
-                className="w-full rounded-lg border border-border bg-surface p-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent leading-relaxed"
-                placeholder="Dán tóm tắt mở bài, các luận cứ chính và kết luận..."
+                className="w-full rounded-xl border border-border bg-background p-4 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent leading-relaxed transition-all resize-none"
+                placeholder="Dán tóm tắt mở bài, nguyên lý kỹ thuật, phương pháp nghiên cứu, số liệu thử nghiệm và giải pháp..."
               />
             </div>
+
+            {/* Test AI Questions Button */}
+            <div className="flex items-center justify-between pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestAiQuestions}
+                disabled={!outlineContent.trim() || isGeneratingPreview}
+                className="border-primary/40 hover:bg-primary-light/10 text-primary"
+              >
+                <Sparkles className={`w-3.5 h-3.5 mr-1.5 ${isGeneratingPreview ? "animate-spin" : ""}`} />
+                <span>{isGeneratingPreview ? "Đang gọi AI phân tích..." : "Kiểm tra & Tạo thử câu hỏi phản biện AI"}</span>
+              </Button>
+              <span className="text-xs text-text-muted">Kiểm tra trước câu hỏi Giám khảo AI sẽ đặt cho đề tài này</span>
+            </div>
+
+            {/* Preview Questions Display */}
+            {previewError && (
+              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{previewError}</span>
+              </div>
+            )}
+
+            {previewQuestions.length > 0 && (
+              <div className="p-4 rounded-xl bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800 space-y-3 animate-in fade-in duration-300">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    Câu hỏi phản biện đã được AI chuẩn bị riêng cho đề tài của bạn:
+                  </span>
+                  <Badge variant="success">AI Live</Badge>
+                </div>
+                <div className="space-y-2">
+                  {previewQuestions.map((q, idx) => (
+                    <div key={idx} className="p-3 rounded-lg bg-surface border border-border text-xs space-y-1">
+                      <div className="font-semibold text-primary flex items-center gap-1.5">
+                        <HelpCircle className="w-3.5 h-3.5" />
+                        <span>
+                          {q.judgeName || `Giám khảo ${idx + 1}`} ({q.judgeRole || "Phản biện"}):
+                        </span>
+                      </div>
+                      <MathText text={q.questionText} className="text-foreground leading-relaxed pl-5 font-medium" />
+                      {q.targetedFlaw && (
+                        <div className="text-[11px] text-text-muted pl-5 italic">
+                          Mục tiêu chất vấn: {q.targetedFlaw}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </Card>
 
         {/* Action Button */}
         <div className="flex items-center justify-between pt-4">
-          <p className="text-xs text-text-muted">
-            Nhấn bắt đầu để cấp quyền Camera/Mic và bước vào khán phòng ảo 3D.
-          </p>
+          <p className="text-xs text-text-muted">Nhấn bắt đầu để cấp quyền Camera/Mic và bước vào khán phòng ảo 3D.</p>
           <Button
             variant="primary"
             size="lg"

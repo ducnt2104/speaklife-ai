@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Award, Eye, Volume2, ShieldCheck, CheckCircle2, AlertTriangle, ArrowLeft, Download, RotateCcw, Sparkles, Loader2 } from "lucide-react";
-import { Button, Card, Badge } from "@/components/ui";
+import { Button, Card, Badge, MathText } from "@/components/ui";
 import { MPRERadarChart } from "@/components/charts/MPRERadarChart";
 import { MPREEvaluationResult } from "@/lib/rubric/mpre-calculator";
 
@@ -204,7 +204,7 @@ function ReportContent() {
           {report.keyRecommendations.map((rec, i) => (
             <div key={i} className="flex items-start gap-2.5 bg-surface p-3.5 rounded-xl border border-violet-100 dark:border-violet-800 text-xs text-foreground">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{rec}</span>
+              <MathText text={rec} className="leading-relaxed" inline />
             </div>
           ))}
         </div>
