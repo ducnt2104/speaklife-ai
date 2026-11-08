@@ -28,12 +28,23 @@ export function createUser(input: CreateUserInput): User {
   const id = `user_${uuidv4().replace(/-/g, "").slice(0, 16)}`;
   const { hash, salt } = hashPassword(input.password);
 
-  const stmt = db.prepare(`
+  const insertUserStmt = db.prepare(`
     INSERT INTO users (id, email, display_name, password_hash, password_salt, role, settings_json)
     VALUES (?, ?, ?, ?, ?, 'student', '{}')
   `);
 
-  stmt.run(id, input.email.toLowerCase().trim(), input.displayName.trim(), hash, salt);
+  const insertSettingsStmt = db.prepare(`
+    INSERT OR IGNORE INTO user_settings (user_id, theme, accent_color, font_size, language, reduced_motion, compact_mode, notifications_enabled)
+    VALUES (?, 'system', 'violet', 'medium', 'vi', 0, 0, 1)
+  `);
+
+  // Execute in an atomic transaction: create user AND initial profile/settings
+  const createUserTx = db.transaction(() => {
+    insertUserStmt.run(id, input.email.toLowerCase().trim(), input.displayName.trim(), hash, salt);
+    insertSettingsStmt.run(id);
+  });
+
+  createUserTx();
 
   return getUserById(id)!;
 }

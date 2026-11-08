@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
+import { rateLimiter } from "@/lib/security/rate-limiter";
+import { apiSuccess, apiError } from "@/lib/api-response";
 
 const RebuttalScoreRequestSchema = z.object({
   question: z.string().min(1),
@@ -9,12 +11,19 @@ const RebuttalScoreRequestSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "client-local";
+  const rateLimit = rateLimiter.check(`ai-eval-rebuttal:${clientIp}`, 15, 60);
+
+  if (!rateLimit.allowed) {
+    return apiError("RATE_LIMITED", "Quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau.", 429);
+  }
+
   try {
     const body = await req.json();
     const parsed = RebuttalScoreRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid rebuttal payload", details: parsed.error.issues }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Dữ liệu phản biện không hợp lệ.", 400, parsed.error.issues);
     }
 
     const { question, answerText, reactionTimeSeconds } = parsed.data;
@@ -40,23 +49,20 @@ export async function POST(req: NextRequest) {
 
     const totalRebuttalRound = Math.min(20, latencyScore + contentScore);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        roundScore: totalRebuttalRound,
-        latencyScore,
-        contentScore,
-        feedback: reactionTimeSeconds <= 3.5 
-          ? "Phản xạ nhanh, bảo vệ luận điểm có dẫn chứng và thái độ tự tin."
-          : "Cần cải thiện thời gian phản xạ ban đầu; câu trả lời tương đối đầy đủ ý.",
-        keyStrengths: [
-          "Bám sát câu hỏi chất vấn của ban giám khảo",
-          "Thái độ điềm tĩnh, không bị mất bình tĩnh"
-        ]
-      }
+    return apiSuccess({
+      roundScore: totalRebuttalRound,
+      latencyScore,
+      contentScore,
+      feedback: reactionTimeSeconds <= 3.5 
+        ? "Phản xạ nhanh, bảo vệ luận điểm có dẫn chứng và thái độ tự tin."
+        : "Cần cải thiện thời gian phản xạ ban đầu; câu trả lời tương đối đầy đủ ý.",
+      keyStrengths: [
+        "Bám sát câu hỏi chất vấn của ban giám khảo",
+        "Thái độ điềm tĩnh, không bị mất bình tĩnh"
+      ]
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[evaluate-rebuttal] Error:", err);
+    return apiError("INTERNAL_ERROR", "Không thể đánh giá phản biện lúc này.", 500);
   }
 }

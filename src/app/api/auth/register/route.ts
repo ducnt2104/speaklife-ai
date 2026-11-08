@@ -6,9 +6,14 @@ import { rateLimiter } from "@/lib/security/rate-limiter";
 import { sanitizeHtml } from "@/lib/security/input-sanitizer";
 
 const RegisterSchema = z.object({
-  email: z.string().email("Email không hợp lệ").max(255),
-  displayName: z.string().min(2, "Tên hiển thị phải có ít nhất 2 ký tự").max(100),
-  password: z.string().min(8, "Mật khẩu phải có ít nhất 8 ký tự").max(128),
+  email: z.string().email("Email không hợp lệ").max(255).transform(v => v.toLowerCase().trim()),
+  displayName: z.string().min(2, "Tên hiển thị phải có ít nhất 2 ký tự").max(100).transform(v => v.trim()),
+  password: z.string()
+    .min(8, "Mật khẩu phải có ít nhất 8 ký tự")
+    .max(128, "Mật khẩu tối đa 128 ký tự")
+    .regex(/[A-Z]/, "Mật khẩu phải chứa ít nhất 1 chữ IN HOA")
+    .regex(/[0-9]/, "Mật khẩu phải chứa ít nhất 1 chữ số")
+    .regex(/[^A-Za-z0-9]/, "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%...)"),
 });
 
 export async function POST(req: NextRequest) {
@@ -25,11 +30,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = RegisterSchema.parse(body);
 
-    // Check if email already exists
+    // Check if email already exists — generic message to prevent user enumeration
     const existing = getUserByEmail(parsed.email);
     if (existing) {
       return NextResponse.json(
-        { error: "Email này đã được sử dụng. Vui lòng đăng nhập hoặc sử dụng email khác." },
+        { success: false, error: { code: "REGISTRATION_FAILED", message: "Không thể tạo tài khoản với thông tin này. Vui lòng thử email khác hoặc đăng nhập." } },
         { status: 409 }
       );
     }
@@ -62,13 +67,13 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Dữ liệu không hợp lệ.", details: error.errors },
+        { success: false, error: { code: "VALIDATION_ERROR", message: "Dữ liệu không hợp lệ.", details: error.errors } },
         { status: 422 }
       );
     }
     console.error("[Register Error]", error);
     return NextResponse.json(
-      { error: "Không thể tạo tài khoản. Vui lòng thử lại." },
+      { success: false, error: { code: "INTERNAL_ERROR", message: "Không thể tạo tài khoản. Vui lòng thử lại." } },
       { status: 500 }
     );
   }

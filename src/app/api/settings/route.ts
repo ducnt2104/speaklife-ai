@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getSessionFromCookie } from "@/lib/auth/session";
 import { getUserSettings, updateUserSettings } from "@/lib/db/settings";
+import { apiSuccess, apiError } from "@/lib/api-response";
 
 const UpdateSettingsSchema = z.object({
   theme: z.enum(["light", "dark", "system"]).optional(),
@@ -16,34 +17,28 @@ const UpdateSettingsSchema = z.object({
 export async function GET() {
   const session = await getSessionFromCookie();
   if (!session) {
-    return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Chưa đăng nhập.", 401);
   }
 
   const settings = getUserSettings(session.userId);
-  return NextResponse.json({ settings });
+  return apiSuccess({ settings });
 }
 
 export async function PUT(req: NextRequest) {
   const session = await getSessionFromCookie();
   if (!session) {
-    return NextResponse.json({ error: "Chưa đăng nhập." }, { status: 401 });
+    return apiError("UNAUTHORIZED", "Chưa đăng nhập.", 401);
   }
 
   try {
     const body = await req.json();
     const parsed = UpdateSettingsSchema.parse(body);
     const settings = updateUserSettings(session.userId, parsed);
-    return NextResponse.json({ success: true, settings });
+    return apiSuccess({ settings });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Giá trị cài đặt không hợp lệ.", details: error.errors },
-        { status: 422 }
-      );
+      return apiError("VALIDATION_ERROR", "Giá trị cài đặt không hợp lệ.", 422, error.errors);
     }
-    return NextResponse.json(
-      { error: "Không thể cập nhật cài đặt." },
-      { status: 500 }
-    );
+    return apiError("INTERNAL_ERROR", "Không thể cập nhật cài đặt.", 500);
   }
 }

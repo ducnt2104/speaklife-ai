@@ -1,25 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
+import { rateLimiter } from "@/lib/security/rate-limiter";
+import { apiSuccess, apiError } from "@/lib/api-response";
 
 const QuestionRequestSchema = z.object({
-  outlineTitle: z.string().min(1),
-  scenarioId: z.string().min(1),
-  difficultyId: z.string().min(1),
+  outlineTitle: z.string().min(1, "Tiêu đề không được để trống").max(500),
+  scenarioId: z.string().min(1).max(100),
+  difficultyId: z.string().min(1).max(100),
   roundNumber: z.number().int().min(1).max(5),
-  speechSnippet: z.string().optional()
+  speechSnippet: z.string().max(2000).optional()
 });
 
 export async function POST(req: NextRequest) {
+  const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "client-local";
+  const rateLimit = rateLimiter.check(`ai-generate-question:${clientIp}`, 15, 60);
+
+  if (!rateLimit.allowed) {
+    return apiError("RATE_LIMITED", "Quá nhiều yêu cầu. Vui lòng thử lại sau.", 429);
+  }
+
   try {
     const body = await req.json();
     const parsed = QuestionRequestSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid payload", details: parsed.error.issues }, { status: 400 });
+      return apiError("VALIDATION_ERROR", "Dữ liệu yêu cầu không hợp lệ.", 400, parsed.error.issues);
     }
 
-    const { outlineTitle, scenarioId, difficultyId, roundNumber, speechSnippet } = parsed.data;
+    const { outlineTitle, scenarioId, difficultyId, roundNumber } = parsed.data;
 
     const questionsByRound: Record<number, string> = {
       1: `Đối với đề tài "${outlineTitle}", luận điểm chính của bạn dựa trên giả định nào và làm sao bạn chứng minh giả định đó đúng trong thực tế?`,
@@ -29,17 +38,14 @@ export async function POST(req: NextRequest) {
 
     const question = questionsByRound[roundNumber] || questionsByRound[1];
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        roundNumber,
-        question,
-        timerSeconds: difficultyId === "adversarial" ? 30 : difficultyId === "standard" ? 45 : 60,
-        suggestedApproach: "1. Xác nhận câu hỏi -> 2. Nêu dẫn chứng số liệu -> 3. Khẳng định tính khả thi"
-      }
+    return apiSuccess({
+      roundNumber,
+      question,
+      timerSeconds: difficultyId === "adversarial" ? 30 : difficultyId === "standard" ? 45 : 60,
+      suggestedApproach: "1. Xác nhận câu hỏi -> 2. Nêu dẫn chứng số liệu -> 3. Khẳng định tính khả thi"
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("[generate-question] Error:", err);
+    return apiError("INTERNAL_ERROR", "Không thể tạo câu hỏi phản biện lúc này.", 500);
   }
 }

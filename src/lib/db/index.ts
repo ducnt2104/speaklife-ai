@@ -7,7 +7,10 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 
-let _db: Database.Database | null = null;
+declare global {
+  // eslint-disable-next-line no-var
+  var __speaklife_db: Database.Database | undefined;
+}
 
 function getDbPath(): string {
   const dbPath = process.env.DATABASE_PATH || "./data/speaklife.db";
@@ -15,7 +18,7 @@ function getDbPath(): string {
 }
 
 export function getDatabase(): Database.Database {
-  if (_db) return _db;
+  if (globalThis.__speaklife_db) return globalThis.__speaklife_db;
 
   const dbPath = getDbPath();
   const dir = path.dirname(dbPath);
@@ -23,17 +26,18 @@ export function getDatabase(): Database.Database {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  _db = new Database(dbPath);
+  const db = new Database(dbPath);
   
   // Enable WAL mode for better concurrent read performance
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-  _db.pragma("busy_timeout = 5000");
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  db.pragma("busy_timeout = 5000");
 
   // Run migrations
-  runMigrations(_db);
+  runMigrations(db);
 
-  return _db;
+  globalThis.__speaklife_db = db;
+  return db;
 }
 
 function runMigrations(db: Database.Database): void {
@@ -52,8 +56,15 @@ function runMigrations(db: Database.Database): void {
 
   for (const migration of MIGRATIONS) {
     if (!applied.has(migration.name)) {
-      db.exec(migration.sql);
-      db.prepare("INSERT INTO _migrations (name) VALUES (?)").run(migration.name);
+      try {
+        db.exec(migration.sql);
+      } catch (err: any) {
+        // If column already exists (e.g. manually added prior to migration tracking), safely continue
+        if (!err.message?.includes("duplicate column name")) {
+          throw err;
+        }
+      }
+      db.prepare("INSERT OR IGNORE INTO _migrations (name) VALUES (?)").run(migration.name);
       console.log(`[DB Migration] Applied: ${migration.name}`);
     }
   }
@@ -168,9 +179,9 @@ const MIGRATIONS = [
 ];
 
 export function closeDatabase(): void {
-  if (_db) {
-    _db.close();
-    _db = null;
+  if (globalThis.__speaklife_db) {
+    globalThis.__speaklife_db.close();
+    globalThis.__speaklife_db = undefined;
   }
 }
 

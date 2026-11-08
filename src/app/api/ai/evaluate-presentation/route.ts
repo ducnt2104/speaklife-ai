@@ -4,6 +4,7 @@ import { sanitizePromptInput } from "@/lib/ai/prompt-guard";
 import { getEffectiveGeminiApiKey } from "@/lib/db/ai-config";
 import { callGeminiWithFallback, extractCleanJson } from "@/lib/ai/gemini-gateway";
 import { rateLimiter } from "@/lib/security/rate-limiter";
+import { apiSuccess, apiError } from "@/lib/api-response";
 
 /**
  * SpeakLife AI — API Đánh giá Bài Thuyết trình 5 Chiều (MPRE Engine v2)
@@ -128,14 +129,11 @@ Trả về ĐÚNG JSON sau, KHÔNG có text thừa:
 }
 
 export async function POST(req: NextRequest) {
-  const clientIp = req.headers.get("x-forwarded-for") || "client-local";
+  const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "client-local";
   const rateLimit = rateLimiter.check(`eval-presentation:${clientIp}`, 5, 60);
 
   if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: "Quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau." },
-      { status: 429 }
-    );
+    return apiError("RATE_LIMITED", "Quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau 1 phút.", 429);
   }
 
   try {
@@ -144,10 +142,7 @@ export async function POST(req: NextRequest) {
 
     const apiKey = getEffectiveGeminiApiKey();
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "Chưa cấu hình API Key Gemini" },
-        { status: 503 }
-      );
+      return apiError("AI_CONFIG_MISSING", "Chưa cấu hình API Key Gemini. Vui lòng cấu hình trong Cài đặt.", 503);
     }
 
     const sanitizedTranscript = sanitizePromptInput(parsed.transcript, 4000).sanitizedText;
@@ -223,15 +218,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Dữ liệu đầu vào không hợp lệ.", details: error.errors },
-        { status: 422 }
-      );
+      return apiError("VALIDATION_ERROR", "Dữ liệu đầu vào không hợp lệ.", 422, error.errors);
     }
     console.error("[evaluate-presentation] Error:", error);
-    return NextResponse.json(
-      { error: "Lỗi đánh giá bài thuyết trình." },
-      { status: 500 }
-    );
+    return apiError("INTERNAL_ERROR", "Lỗi đánh giá bài thuyết trình. Vui lòng thử lại.", 500);
   }
 }

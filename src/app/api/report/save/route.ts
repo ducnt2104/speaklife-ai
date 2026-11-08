@@ -6,6 +6,7 @@ import { createSession, getSessionById, completeSession } from "@/lib/db/session
 import { calculateMPREScore } from "@/lib/rubric/mpre-calculator";
 import { rateLimiter } from "@/lib/security/rate-limiter";
 import { sanitizeNoSql } from "@/lib/security/input-sanitizer";
+import { apiSuccess, apiError } from "@/lib/api-response";
 
 const SaveReportSchema = z.object({
   sessionId: z.string().min(1).max(100),
@@ -37,14 +38,11 @@ const SaveReportSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const clientIp = req.headers.get("x-forwarded-for") || "client-local";
+  const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "client-local";
   const rateLimit = rateLimiter.check(`report-save:${clientIp}`, 10, 60);
 
   if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { error: "Quá nhiều báo cáo. Vui lòng thử lại sau." },
-      { status: 429 }
-    );
+    return apiError("RATE_LIMITED", "Quá nhiều báo cáo được gửi lên. Vui lòng thử lại sau 1 phút.", 429);
   }
 
   const authSession = await getSessionFromRequest(req);
@@ -108,15 +106,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Dữ liệu báo cáo không hợp lệ.", details: error.errors },
-        { status: 422 }
-      );
+      return apiError("VALIDATION_ERROR", "Dữ liệu báo cáo không hợp lệ.", 422, error.errors);
     }
     console.error("[Report Save Error]", error);
-    return NextResponse.json(
-      { error: "Không thể lưu báo cáo." },
-      { status: 500 }
-    );
+    return apiError("INTERNAL_ERROR", "Không thể lưu báo cáo lúc này.", 500);
   }
 }

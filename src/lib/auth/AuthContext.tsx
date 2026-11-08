@@ -126,7 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await refreshUser();
         return { success: true };
       }
-      return { success: false, error: data.error || "Đăng nhập thất bại" };
+      const errorMsg = typeof data.error === "object" ? data.error?.message : data.error;
+      return { success: false, error: errorMsg || "Đăng nhập thất bại" };
     } catch {
       return { success: false, error: "Lỗi kết nối máy chủ" };
     }
@@ -144,7 +145,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await refreshUser();
         return { success: true };
       }
-      return { success: false, error: data.error || "Đăng ký thất bại" };
+      const errorMsg = typeof data.error === "object" ? data.error?.message : data.error;
+      return { success: false, error: errorMsg || "Đăng ký thất bại" };
     } catch {
       return { success: false, error: "Lỗi kết nối máy chủ" };
     }

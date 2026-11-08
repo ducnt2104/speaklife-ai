@@ -20,6 +20,9 @@ export default function RegisterPage() {
 
   const passwordChecks = [
     { label: "Tối thiểu 8 ký tự", valid: password.length >= 8 },
+    { label: "Ít nhất 1 chữ IN HOA (A-Z)", valid: /[A-Z]/.test(password) },
+    { label: "Ít nhất 1 chữ số (0-9)", valid: /[0-9]/.test(password) },
+    { label: "Ít nhất 1 ký tự đặc biệt (!@#$...)", valid: /[^A-Za-z0-9]/.test(password) },
     { label: "Xác nhận mật khẩu khớp", valid: password.length > 0 && password === confirmPassword },
   ];
 
@@ -100,7 +103,7 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 pr-10 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                placeholder="Tối thiểu 8 ký tự"
+                placeholder="Tối thiểu 8 ký tự, có hoa, số & ký tự đặc biệt"
                 required
                 minLength={8}
                 autoComplete="new-password"
