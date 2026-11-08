@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Mic2, ShieldCheck, BarChart3, Settings, PlayCircle, LogIn, LogOut, Menu, X, User } from "lucide-react";
+import { Mic2, ShieldCheck, BarChart3, Settings, PlayCircle, LogIn, LogOut, Menu, X, User, History } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 export const Navbar: React.FC = () => {
@@ -18,6 +18,7 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { href: "/dashboard", label: "Tiến độ", icon: BarChart3 },
+    { href: "/history", label: "Lịch sử", icon: History },
     { href: "/setup", label: "Luyện tập", icon: PlayCircle },
     { href: "/settings", label: "Cài đặt", icon: Settings },
     { href: "/privacy", label: "Bảo mật Zero-Data", icon: ShieldCheck, accent: true },

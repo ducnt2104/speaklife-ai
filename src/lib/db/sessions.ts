@@ -51,6 +51,28 @@ export function getSessionsByUser(userId: string, limit: number = 20, offset: nu
   ).all(userId, limit, offset) as RehearsalSession[];
 }
 
+export interface SessionWithReport extends RehearsalSession {
+  total_score: number | null;
+  tier: string | null;
+  report_id: string | null;
+}
+
+export function getSessionsWithReportsByUser(userId: string, limit: number = 50, offset: number = 0): SessionWithReport[] {
+  const db = getDatabase();
+  return db.prepare(`
+    SELECT 
+      s.*,
+      r.total_score,
+      r.tier,
+      r.id as report_id
+    FROM rehearsal_sessions s
+    LEFT JOIN reports r ON r.session_id = s.id
+    WHERE s.user_id = ?
+    ORDER BY s.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(userId, limit, offset) as SessionWithReport[];
+}
+
 export function completeSession(id: string, userId: string, durationSeconds: number): boolean {
   const db = getDatabase();
   const result = db.prepare(
